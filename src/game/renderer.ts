@@ -1,12 +1,8 @@
 import { EGG_HATCH_TIME, EGG_RADIUS, GAME_HEIGHT, GAME_WIDTH, isGrounded, LAVA_PITS, LAVA_Y, SPAWN_POINTS } from './simulation'
+import { getMountFrame, getRiderFrame, getRiderSpriteFacing, type MountClass } from './sprite-mapping'
 import type { Bird, Egg, Enemy, GameState } from './types'
 
 const PLATFORM_COLOR = '#91c6a1'
-const SPRITE_STRIPS = {
-  player: { x: 0, y: 117, frameWidth: 42, frameHeight: 40, frames: 8, restFrame: 1 },
-  rider: { x: 338, y: 167, frameWidth: 44, frameHeight: 40, frames: 6, restFrame: 1 },
-  pterodactyl: { x: 91, y: 217, frameWidth: 44, frameHeight: 28, frames: 6, restFrame: 1 },
-} as const
 
 let spriteAtlas: HTMLImageElement | undefined
 
@@ -18,8 +14,7 @@ spriteImage.src = 'https://i.pinimg.com/originals/85/18/64/851864d48f862c473596a
 
 function drawAtlasFrame(
   context: CanvasRenderingContext2D,
-  strip: (typeof SPRITE_STRIPS)[keyof typeof SPRITE_STRIPS],
-  frame: number,
+  source: { x: number; y: number; width: number; height: number },
   x: number,
   y: number,
   facing: -1 | 1,
@@ -27,7 +22,6 @@ function drawAtlasFrame(
   height: number,
 ) {
   if (!spriteAtlas) return false
-  const frameIndex = ((frame % strip.frames) + strip.frames) % strip.frames
   context.save()
   context.globalCompositeOperation = 'screen'
   if (facing < 0) {
@@ -35,10 +29,10 @@ function drawAtlasFrame(
     context.scale(-1, 1)
     context.drawImage(
       spriteAtlas,
-      strip.x + frameIndex * strip.frameWidth,
-      strip.y,
-      strip.frameWidth,
-      strip.frameHeight,
+      source.x,
+      source.y,
+      source.width,
+      source.height,
       -width / 2,
       -height / 2,
       width,
@@ -47,10 +41,10 @@ function drawAtlasFrame(
   } else {
     context.drawImage(
       spriteAtlas,
-      strip.x + frameIndex * strip.frameWidth,
-      strip.y,
-      strip.frameWidth,
-      strip.frameHeight,
+      source.x,
+      source.y,
+      source.width,
+      source.height,
       x - width / 2,
       y - height / 2,
       width,
@@ -179,9 +173,6 @@ function drawEgg(context: CanvasRenderingContext2D, egg: Egg) {
 }
 
 function drawPterodactyl(context: CanvasRenderingContext2D, enemy: Enemy, time: number, flying: boolean) {
-  const frame = flying ? Math.floor(time * 12) : SPRITE_STRIPS.pterodactyl.restFrame
-  if (drawAtlasFrame(context, SPRITE_STRIPS.pterodactyl, frame, enemy.x, enemy.y, enemy.facing, 64, 44)) return
-
   context.save()
   context.translate(enemy.x, enemy.y)
   if (enemy.facing < 0) context.scale(-1, 1)
@@ -211,10 +202,24 @@ function drawPterodactyl(context: CanvasRenderingContext2D, enemy: Enemy, time: 
   context.restore()
 }
 
-function drawBird(context: CanvasRenderingContext2D, bird: Bird, color: string, time: number, isPlayer: boolean, flying: boolean) {
-  const strip = isPlayer ? SPRITE_STRIPS.player : SPRITE_STRIPS.rider
-  const frame = flying ? Math.floor(time * 12 + bird.x * 0.01) : strip.restFrame
-  if (drawAtlasFrame(context, strip, frame, bird.x, bird.y, bird.facing, 54, 52)) return
+function drawBird(
+  context: CanvasRenderingContext2D,
+  bird: Bird,
+  color: string,
+  time: number,
+  isPlayer: boolean,
+  flying: boolean,
+  mountClass: MountClass,
+) {
+  const moving = Math.abs(bird.vx) > 8
+  const frame = getMountFrame(mountClass, bird.facing, flying, moving, Math.floor(time * (flying ? 10 : 8)))
+  if (drawAtlasFrame(context, frame, bird.x, bird.y, bird.facing, 66, 56)) {
+    const rider = getRiderFrame(mountClass, bird.facing)
+    const riderWidth = mountClass === 'player' ? 28 : 38
+    const riderHeight = mountClass === 'player' ? 42 : 42
+    drawAtlasFrame(context, rider, bird.x, bird.y - 15, getRiderSpriteFacing(mountClass, bird.facing), riderWidth, riderHeight)
+    return
+  }
 
   context.save()
   context.translate(bird.x, bird.y)
@@ -335,10 +340,10 @@ export function renderGame(context: CanvasRenderingContext2D, game: GameState) {
   for (const enemy of game.enemies) {
     const flying = !isGrounded(enemy, game.platforms)
     if (enemy.kind === 'pterodactyl') drawPterodactyl(context, enemy, game.time, flying)
-    else drawBird(context, enemy, '#d55f49', game.time, false, flying)
+    else drawBird(context, enemy, '#d55f49', game.time, false, flying, enemy.hatchLevel > 0 ? 'hunter' : 'bounder')
   }
   if (game.player.invulnerability <= 0 || Math.floor(game.time * 14) % 2 === 0) {
-    drawBird(context, game.player, '#44bda1', game.time, true, !isGrounded(game.player, game.platforms))
+    drawBird(context, game.player, '#44bda1', game.time, true, !isGrounded(game.player, game.platforms), 'player')
   }
 
   if (game.mode === 'playing') drawHud(context, game)
