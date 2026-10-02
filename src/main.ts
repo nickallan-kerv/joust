@@ -28,7 +28,8 @@ let accumulator = 0
 let lastAccessibleState = ''
 
 function updateAccessibleState() {
-  const state = `Joust flight duel. Mode: ${game.mode}. Wave ${game.wave}; score ${game.player.score}; lives ${game.player.lives}; eggs ${game.eggs.length}. Use left and right arrows or A and D to steer, Space to flap once per press, and Enter to start or restart.`
+  const facing = game.player.facing < 0 ? 'left' : 'right'
+  const state = `Joust flight duel. Mode: ${game.mode}. Player facing ${facing}. Wave ${game.wave}; score ${game.player.score}; lives ${game.player.lives}; eggs ${game.eggs.length}. Use left and right arrows or A and D to steer, Space to flap once per press, and Enter to start or restart.`
   if (state === lastAccessibleState) return
   canvas.setAttribute('aria-label', state)
   lastAccessibleState = state
