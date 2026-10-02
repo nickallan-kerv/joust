@@ -60,6 +60,7 @@ export interface GameState {
 export interface InputState {
   left: boolean
   right: boolean
+  facingPress?: -1 | 1
   flap: boolean
   start: boolean
 }
