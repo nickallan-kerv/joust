@@ -63,6 +63,17 @@ describe('keyboard input', () => {
     expect(input.read().left).toBe(false)
   })
 
+  it('latches facing for a direction tap released before the simulation reads it', () => {
+    const input = createKeyboardInput()
+    dispatch('keydown', 'ArrowLeft')
+    dispatch('keyup', 'ArrowLeft')
+
+    const tap = input.read()
+    expect(tap.left).toBe(false)
+    expect(tap.facingPress).toBe(-1)
+    expect(input.read().facingPress).toBeUndefined()
+  })
+
   it('emits Enter as a one-shot start event', () => {
     const input = createKeyboardInput()
     dispatch('keydown', 'Enter')
