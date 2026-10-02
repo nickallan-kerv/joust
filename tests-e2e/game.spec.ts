@@ -27,7 +27,20 @@ test('starts a run with Enter and exposes the current state accessibly', async (
   await expect(canvas).toHaveAttribute('aria-label', /Mode: title/)
   await canvas.focus()
   await page.keyboard.press('Enter')
-  await expect(canvas).toHaveAttribute('aria-label', /Mode: playing\. Wave 1/)
+  await expect(canvas).toHaveAttribute('aria-label', /Mode: playing\. Player facing right\. Wave 1/)
+})
+
+test('updates player facing in both steering directions', async ({ page }) => {
+  const canvas = page.locator('#gameCanvas')
+  await canvas.focus()
+  await page.keyboard.press('Enter')
+  await expect(canvas).toHaveAttribute('aria-label', /Mode: playing/)
+
+  await page.keyboard.press('ArrowLeft')
+  await expect(canvas).toHaveAttribute('aria-label', /Player facing left/)
+
+  await page.keyboard.press('ArrowRight')
+  await expect(canvas).toHaveAttribute('aria-label', /Player facing right/)
 })
 
 test('fits a narrow viewport without scrolling', async ({ page }) => {
