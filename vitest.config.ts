@@ -5,7 +5,7 @@ export default defineConfig({
     include: ['src/**/*.test.ts'],
     coverage: {
       provider: 'v8',
-      include: ['src/game/audio.ts', 'src/game/input.ts', 'src/game/simulation.ts'],
+      include: ['src/game/audio.ts', 'src/game/input.ts', 'src/game/simulation.ts', 'src/game/sprite-mapping.ts'],
       reporter: ['text', 'html'],
       thresholds: {
         statements: 95,
