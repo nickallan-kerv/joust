@@ -154,14 +154,15 @@ function landOnPlatforms(bird: Bird, previousY: number, platforms: Platform[]) {
 
 function moveBird(
   bird: Bird,
-  input: Pick<InputState, 'left' | 'right' | 'flap'>,
+  input: Pick<InputState, 'left' | 'right' | 'flap' | 'facingPress'>,
   dt: number,
   platforms: Platform[],
   speedMultiplier = 1,
 ) {
   const previousY = bird.y
   const grounded = isGrounded(bird, platforms)
-  const direction = Number(input.right) - Number(input.left)
+  const heldDirection = Number(input.right) - Number(input.left)
+  const direction = heldDirection !== 0 ? heldDirection : input.facingPress ?? 0
 
   if (direction !== 0) {
     const acceleration = grounded ? 1200 : 520
