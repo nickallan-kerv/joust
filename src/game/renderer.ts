@@ -17,14 +17,14 @@ function drawAtlasFrame(
   source: { x: number; y: number; width: number; height: number },
   x: number,
   y: number,
-  facing: -1 | 1,
+  mirrorHorizontally: boolean,
   width: number,
   height: number,
 ) {
   if (!spriteAtlas) return false
   context.save()
   context.globalCompositeOperation = 'screen'
-  if (facing < 0) {
+  if (mirrorHorizontally) {
     context.translate(x, y)
     context.scale(-1, 1)
     context.drawImage(
@@ -213,11 +213,11 @@ function drawBird(
 ) {
   const moving = Math.abs(bird.vx) > 8
   const frame = getMountFrame(mountClass, bird.facing, flying, moving, Math.floor(time * (flying ? 10 : 8)))
-  if (drawAtlasFrame(context, frame, bird.x, bird.y, bird.facing, 66, 56)) {
+  if (drawAtlasFrame(context, frame, bird.x, bird.y, false, 66, 56)) {
     const rider = getRiderFrame(mountClass, bird.facing)
     const riderWidth = mountClass === 'player' ? 28 : 38
     const riderHeight = mountClass === 'player' ? 42 : 42
-    drawAtlasFrame(context, rider, bird.x, bird.y - 15, getRiderSpriteFacing(mountClass, bird.facing), riderWidth, riderHeight)
+    drawAtlasFrame(context, rider, bird.x, bird.y - 15, getRiderSpriteFacing(mountClass, bird.facing) < 0, riderWidth, riderHeight)
     return
   }
 
