@@ -225,6 +225,16 @@ describe('flight simulation', () => {
     expect(groundedGame.player.vx).toBeGreaterThan(airborneGame.player.vx * 2)
   })
 
+  it('updates player facing when a short direction press is released before a tick', () => {
+    const game = createGameState()
+    startGame(game)
+    game.player.invulnerability = 1
+
+    stepGame(game, { ...noInput, facingPress: -1 }, 1 / 60)
+
+    expect(game.player.facing).toBe(-1)
+  })
+
   it('reaches a higher sustained horizontal speed on the ground than in the air', () => {
     const groundedGame = createGameState()
     startGame(groundedGame)
