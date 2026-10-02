@@ -10,6 +10,17 @@ describe('Joust sprite atlas mappings', () => {
     expect(getMountFrame('player', -1, true, true, 1)).toEqual({ x: 336, y: 117, width: 42, height: 40 })
   })
 
+  it('selects native reverse strips rather than reusing the forward strip', () => {
+    for (const mountClass of ['player', 'bounder', 'hunter'] as const) {
+      expect(getMountFrame(mountClass, -1, false, true, 0).x).not.toBe(
+        getMountFrame(mountClass, 1, false, true, 0).x,
+      )
+      expect(getMountFrame(mountClass, -1, true, true, 0).x).not.toBe(
+        getMountFrame(mountClass, 1, true, true, 0).x,
+      )
+    }
+  })
+
   it('maps Bounder and Hunter animation strips separately', () => {
     expect(getMountFrame('bounder', 1, false, true, 0).y).toBe(117)
     expect(getMountFrame('bounder', 1, true, true, 0).y).toBe(167)
