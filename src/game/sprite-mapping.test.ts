@@ -1,13 +1,27 @@
 import { describe, expect, it } from 'vitest'
-import { getMountFrame, getRiderFrame, getRiderSpriteFacing } from './sprite-mapping'
+import { spriteAnimations, spriteAtlases, validateSpriteDefinitions } from './sprite-data'
+import { getMountFrame, getPlatformFrame, getRiderFrame, getRiderHorizontalOffset, getRiderSpriteFacing, getSpriteAtlasImage, getSpriteAtlasWidth, getSpriteBlendMode, getSpriteComposition } from './sprite-mapping'
 
 describe('Joust sprite atlas mappings', () => {
-  it('maps five player walk frames and two flight frames per direction', () => {
-    expect(getMountFrame('player', 1, false, true, 0)).toEqual({ x: 378, y: 67, width: 42, height: 40 })
-    expect(getMountFrame('player', 1, false, true, 4)).toEqual({ x: 546, y: 67, width: 42, height: 40 })
-    expect(getMountFrame('player', -1, false, true, 0)).toEqual({ x: 84, y: 117, width: 42, height: 40 })
-    expect(getMountFrame('player', 1, true, true, 1)).toEqual({ x: 42, y: 117, width: 42, height: 40 })
-    expect(getMountFrame('player', -1, true, true, 1)).toEqual({ x: 336, y: 117, width: 42, height: 40 })
+  it('uses configured Player strips for walking and flight frames', () => {
+    const animation = spriteAnimations.player
+    const toFrame = (strip: typeof animation.strips.walkRight, index: number) => ({
+      x: strip.x + index * strip.frameWidth,
+      y: strip.y,
+      width: strip.frameWidth,
+      height: strip.frameHeight,
+    })
+    expect(getMountFrame('player', 1, false, true, 0)).toEqual(toFrame(animation.strips.walkRight, 0))
+    expect(getMountFrame('player', 1, false, true, animation.strips.walkRight.count - 1)).toEqual(
+      toFrame(animation.strips.walkRight, animation.strips.walkRight.count - 1),
+    )
+    expect(getMountFrame('player', -1, false, true, 0)).toEqual(toFrame(animation.strips.walkLeft, 0))
+    expect(getMountFrame('player', 1, true, true, animation.strips.flyRight.count - 1)).toEqual(
+      toFrame(animation.strips.flyRight, animation.strips.flyRight.count - 1),
+    )
+    expect(getMountFrame('player', -1, true, true, animation.strips.flyLeft.count - 1)).toEqual(
+      toFrame(animation.strips.flyLeft, animation.strips.flyLeft.count - 1),
+    )
   })
 
   it('selects native reverse strips rather than reusing the forward strip', () => {
@@ -22,31 +36,75 @@ describe('Joust sprite atlas mappings', () => {
   })
 
   it('maps Bounder and Hunter animation strips separately', () => {
-    expect(getMountFrame('bounder', 1, false, true, 0).y).toBe(117)
-    expect(getMountFrame('bounder', 1, true, true, 0).y).toBe(167)
-    expect(getMountFrame('hunter', 1, false, true, 0).y).toBe(167)
-    expect(getMountFrame('hunter', 1, true, true, 0).y).toBe(217)
+    for (const mountClass of ['bounder', 'hunter'] as const) {
+      const animation = spriteAnimations[mountClass]
+      for (const [flying, stripName] of [[false, 'walkRight'], [true, 'flyRight']] as const) {
+        const strip = animation.strips[stripName]
+        expect(getMountFrame(mountClass, 1, flying, true, 0)).toEqual({
+          x: strip.x,
+          y: strip.y,
+          width: strip.frameWidth,
+          height: strip.frameHeight,
+        })
+      }
+    }
   })
 
-  it('uses one static rider overlay rectangle per class', () => {
-    expect(getRiderFrame('player', -1)).toEqual({ x: 530, y: 386, width: 12, height: 18 })
-    expect(getRiderFrame('player', 1)).toEqual({ x: 530, y: 386, width: 12, height: 18 })
-    expect(getRiderFrame('bounder', -1)).toEqual({ x: 108, y: 250, width: 34, height: 38 })
-    expect(getRiderFrame('bounder', 1)).toEqual({ x: 70, y: 250, width: 34, height: 38 })
-    expect(getRiderFrame('hunter', -1)).toEqual({ x: 182, y: 250, width: 34, height: 38 })
-    expect(getRiderFrame('hunter', 1)).toEqual({ x: 144, y: 250, width: 34, height: 38 })
+  it('maps native-facing Player rider crops separately from enemy overlays', () => {
+    for (const mountClass of ['player', 'bounder', 'hunter'] as const) {
+      const animation = spriteAnimations[mountClass]
+      const atlas = spriteAtlases[animation.atlas]
+      expect(getRiderFrame(mountClass, -1)).toEqual(atlas.frames[animation.riderFrames.left])
+      expect(getRiderFrame(mountClass, 1)).toEqual(atlas.frames[animation.riderFrames.right])
+    }
   })
 
-  it('mirrors the single player standing crop but uses native enemy facing crops', () => {
-    expect(getRiderSpriteFacing('player', -1)).toBe(-1)
+  it('uses native facing crops for Player and enemy riders', () => {
+    expect(getRiderSpriteFacing('player', -1)).toBe(1)
     expect(getRiderSpriteFacing('player', 1)).toBe(1)
     expect(getRiderSpriteFacing('bounder', -1)).toBe(1)
     expect(getRiderSpriteFacing('hunter', -1)).toBe(1)
+  })
+
+  it('shifts only right-facing enemy riders toward the mount', () => {
+    expect(getRiderHorizontalOffset('bounder', 1)).toBe(5)
+    expect(getRiderHorizontalOffset('hunter', 1)).toBe(5)
+    expect(getRiderHorizontalOffset('bounder', -1)).toBe(0)
+    expect(getRiderHorizontalOffset('player', 1)).toBe(0)
   })
 
   it('holds on a planted walking pose instead of cycling while idle', () => {
     expect(getMountFrame('bounder', 1, false, false, 0)).toEqual(
       getMountFrame('bounder', 1, false, false, 4),
     )
+  })
+
+  it('maps the standard platform strip and temporary lava-cover tile', () => {
+    expect(getPlatformFrame(false)).toEqual(spriteAtlases.joust.frames.platformStandard)
+    expect(getPlatformFrame(true)).toEqual(spriteAtlases.joust.frames.platformCover)
+  })
+
+  it('exposes atlas and composition metadata from JSON', () => {
+    expect(getSpriteAtlasImage()).toBe(spriteAtlases.joust.image)
+    expect(getSpriteAtlasWidth()).toBe(spriteAtlases.joust.width)
+    expect(getSpriteBlendMode()).toBe(spriteAtlases.joust.blendMode)
+    expect(getSpriteComposition('player')).toEqual(spriteAnimations.player.composition)
+    expect(getSpriteComposition('bounder')).toEqual(spriteAnimations.bounder.composition)
+    expect(getSpriteComposition('hunter')).toEqual(spriteAnimations.hunter.composition)
+  })
+
+  it('validates all manifest-loaded sprite definitions', () => {
+    expect(() => validateSpriteDefinitions(Object.values(spriteAtlases), Object.values(spriteAnimations))).not.toThrow()
+  })
+
+  it('rejects crops and animation strips outside the atlas bounds', () => {
+    const atlas = structuredClone(spriteAtlases.joust)
+    atlas.frames.platformStandard.x = atlas.width
+    expect(() => validateSpriteDefinitions([atlas], Object.values(spriteAnimations))).toThrow(/exceeds atlas/)
+
+    const validAtlas = structuredClone(spriteAtlases.joust)
+    const animation = structuredClone(spriteAnimations.player)
+    animation.strips.walkRight.x = validAtlas.width
+    expect(() => validateSpriteDefinitions([validAtlas], [animation, spriteAnimations.bounder, spriteAnimations.hunter])).toThrow(/exceeds atlas/)
   })
 })

@@ -1,0 +1,55 @@
+{
+  "id": "hunter",
+  "atlas": "joust",
+  "strips": {
+    "walkRight": {
+      "x": 378,
+      "y": 167,
+      "frameWidth": 46,
+      "frameHeight": 40,
+      "count": 5
+    },
+    "flyRight": {
+      "x": 0,
+      "y": 217,
+      "frameWidth": 42,
+      "frameHeight": 32,
+      "count": 2
+    },
+    "walkLeft": {
+      "x": 91,
+      "y": 217,
+      "frameWidth": 42,
+      "frameHeight": 32,
+      "count": 5
+    },
+    "flyLeft": {
+      "x": 310,
+      "y": 217,
+      "frameWidth": 42,
+      "frameHeight": 32,
+      "count": 2
+    }
+  },
+  "idleWalkFrame": 2,
+  "riderFrames": {
+    "left": "riderHunterLeft",
+    "right": "riderHunterRight"
+  },
+  "riderFacing": "native",
+  "riderOffset": {
+    "left": 0,
+    "right": 5
+  },
+  "composition": {
+    "mountSize": {
+      "width": 66,
+      "height": 56
+    },
+    "riderSize": {
+      "width": 38,
+      "height": 42
+    },
+    "riderYOffset": -15
+  }
+}

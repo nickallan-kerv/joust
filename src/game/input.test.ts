@@ -36,18 +36,22 @@ afterEach(() => {
 })
 
 describe('keyboard input', () => {
-  it('emits one flap per Space press, not for held-key repeat events', () => {
+  it('emits one flap per Z press, not for held-key repeat events', () => {
     const input = createKeyboardInput()
 
     dispatch('keydown', 'Space')
+    expect(input.read().flap).toBe(false)
+    dispatch('keyup', 'Space')
+
+    dispatch('keydown', 'KeyZ')
     expect(input.read().flap).toBe(true)
     expect(input.read().flap).toBe(false)
 
-    dispatch('keydown', 'Space', true)
+    dispatch('keydown', 'KeyZ', true)
     expect(input.read().flap).toBe(false)
 
-    dispatch('keyup', 'Space')
-    dispatch('keydown', 'Space')
+    dispatch('keyup', 'KeyZ')
+    dispatch('keydown', 'KeyZ')
     expect(input.read().flap).toBe(true)
   })
 
@@ -86,7 +90,7 @@ describe('keyboard input', () => {
   it('clears held and queued input on blur and detaches listeners on disposal', () => {
     const input = createKeyboardInput()
     dispatch('keydown', 'ArrowRight')
-    dispatch('keydown', 'Space')
+    dispatch('keydown', 'KeyZ')
     input.clear()
     expect(input.read()).toEqual({ left: false, right: false, flap: false, start: false })
 

@@ -1,0 +1,55 @@
+{
+  "id": "player",
+  "atlas": "joust",
+  "strips": {
+    "walkRight": {
+      "x": 378,
+      "y": 67,
+      "frameWidth": 45,
+      "frameHeight": 40,
+      "count": 5
+    },
+    "flyRight": {
+      "x": 0,
+      "y": 117,
+      "frameWidth": 42,
+      "frameHeight": 40,
+      "count": 2
+    },
+    "walkLeft": {
+      "x": 89,
+      "y": 117,
+      "frameWidth": 42,
+      "frameHeight": 40,
+      "count": 5
+    },
+    "flyLeft": {
+      "x": 294,
+      "y": 117,
+      "frameWidth": 42,
+      "frameHeight": 40,
+      "count": 2
+    }
+  },
+  "idleWalkFrame": 2,
+  "riderFrames": {
+    "left": "riderPlayerLeft",
+    "right": "riderPlayerRight"
+  },
+  "riderFacing": "native",
+  "riderOffset": {
+    "left": 0,
+    "right": 0
+  },
+  "composition": {
+    "mountSize": {
+      "width": 66,
+      "height": 56
+    },
+    "riderSize": {
+      "width": 28,
+      "height": 42
+    },
+    "riderYOffset": -15
+  }
+}

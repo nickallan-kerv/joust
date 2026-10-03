@@ -1,7 +1,7 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 
-test.beforeEach(async ({ page }) => {
-  await page.goto('/')
+test.beforeEach(async ({ page, appUrl }) => {
+  await page.goto(new URL('/', appUrl).toString())
 })
 
 test('keeps the game canvas full-window without external page furniture', async ({ page }) => {

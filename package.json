@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:inspector": "vite --open /sprite-inspector/",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
@@ -13,6 +14,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.4",
     "@vitest/coverage-v8": "^5.0.3",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",

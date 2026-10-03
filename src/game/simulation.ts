@@ -3,6 +3,7 @@ import type { Bird, Egg, Enemy, GameState, InputState, Platform } from './types'
 export const GAME_WIDTH = 960
 export const GAME_HEIGHT = 540
 export const BIRD_RADIUS = 19
+export const PLATFORM_CONTACT_RADIUS = 28
 export const LAVA_Y = 510
 export const LAVA_PITS = [
   { x: 0, width: 240 },
@@ -15,13 +16,13 @@ const GRAVITY = 780
 const MAX_FALL_SPEED = 430
 const FLAP_COOLDOWN = 0.16
 const PLATFORM_LAYOUT: Platform[] = [
-  { x: 240, y: 442, width: 480, height: 16 },
-  { x: 0, y: 165, width: 160, height: 14 },
-  { x: 260, y: 185, width: 440, height: 14 },
-  { x: 800, y: 165, width: 160, height: 14 },
-  { x: 0, y: 292, width: 200, height: 14 },
-  { x: 760, y: 276, width: 200, height: 14 },
-  { x: 333, y: 330, width: 294, height: 14 },
+  { x: 240, y: 442, width: 480, height: 15 },
+  { x: 0, y: 165, width: 160, height: 15 },
+  { x: 260, y: 185, width: 440, height: 15 },
+  { x: 800, y: 165, width: 160, height: 15 },
+  { x: 0, y: 292, width: 200, height: 15 },
+  { x: 760, y: 276, width: 200, height: 15 },
+  { x: 333, y: 330, width: 294, height: 15 },
 ]
 export const SPAWN_POINTS = [
   { x: 410, y: 150, markerY: 185 },
@@ -30,8 +31,8 @@ export const SPAWN_POINTS = [
   { x: 480, y: 407, markerY: 442 },
 ]
 const LAVA_COVERS: Platform[] = [
-  { x: 0, y: 442, width: 240, height: 16, burnsAway: true },
-  { x: 720, y: 442, width: 240, height: 16, burnsAway: true },
+  { x: 0, y: 442, width: 240, height: 15, burnsAway: true },
+  { x: 720, y: 442, width: 240, height: 15, burnsAway: true },
 ]
 
 function makeBird(x: number, y: number, facing: -1 | 1): Bird {
@@ -121,21 +122,21 @@ function isOverLava(x: number) {
   return LAVA_PITS.some((pit) => x + BIRD_RADIUS > pit.x && x - BIRD_RADIUS < pit.x + pit.width)
 }
 
-export function isGrounded(bird: Bird, platforms: Platform[]) {
+export function isGrounded(bird: Bird, platforms: Platform[], platformContactRadius = PLATFORM_CONTACT_RADIUS) {
   return bird.vy >= 0 && platforms.some((platform) =>
-    Math.abs(bird.y + BIRD_RADIUS - platform.y) <= 1 &&
+    Math.abs(bird.y + platformContactRadius - platform.y) <= 1 &&
     bird.x >= platform.x - BIRD_RADIUS &&
     bird.x <= platform.x + platform.width + BIRD_RADIUS,
   )
 }
 
-function landOnPlatforms(bird: Bird, previousY: number, platforms: Platform[]) {
+function landOnPlatforms(bird: Bird, previousY: number, platforms: Platform[], platformContactRadius: number) {
   if (bird.vy < 0) {
     for (const platform of platforms) {
-      const crossedUnderside = previousY - BIRD_RADIUS >= platform.y + platform.height && bird.y - BIRD_RADIUS <= platform.y + platform.height
+      const crossedUnderside = previousY - platformContactRadius >= platform.y + platform.height && bird.y - platformContactRadius <= platform.y + platform.height
       const underPlatform = bird.x >= platform.x - BIRD_RADIUS && bird.x <= platform.x + platform.width + BIRD_RADIUS
       if (!crossedUnderside || !underPlatform) continue
-      bird.y = platform.y + platform.height + BIRD_RADIUS
+      bird.y = platform.y + platform.height + platformContactRadius
       bird.vy = Math.max(90, Math.abs(bird.vy) * 0.42)
       return
     }
@@ -143,10 +144,10 @@ function landOnPlatforms(bird: Bird, previousY: number, platforms: Platform[]) {
   }
 
   for (const platform of platforms) {
-    const crossedPlatform = previousY + BIRD_RADIUS <= platform.y && bird.y + BIRD_RADIUS >= platform.y
+    const crossedPlatform = previousY + platformContactRadius <= platform.y && bird.y + platformContactRadius >= platform.y
     const abovePlatform = bird.x >= platform.x - BIRD_RADIUS && bird.x <= platform.x + platform.width + BIRD_RADIUS
     if (!crossedPlatform || !abovePlatform) continue
-    bird.y = platform.y - BIRD_RADIUS
+    bird.y = platform.y - platformContactRadius
     bird.vy = 0
     return
   }
@@ -158,9 +159,10 @@ function moveBird(
   dt: number,
   platforms: Platform[],
   speedMultiplier = 1,
+  platformContactRadius = PLATFORM_CONTACT_RADIUS,
 ) {
   const previousY = bird.y
-  const grounded = isGrounded(bird, platforms)
+  const grounded = isGrounded(bird, platforms, platformContactRadius)
   const heldDirection = Number(input.right) - Number(input.left)
   const direction = heldDirection !== 0 ? heldDirection : input.facingPress ?? 0
 
@@ -193,7 +195,7 @@ function moveBird(
     bird.vy = Math.max(90, Math.abs(bird.vy) * 0.42)
   }
 
-  landOnPlatforms(bird, previousY, platforms)
+  landOnPlatforms(bird, previousY, platforms, platformContactRadius)
 }
 
 function loseLife(game: GameState, message: string) {
@@ -215,16 +217,17 @@ function loseLife(game: GameState, message: string) {
 }
 
 function updateEnemy(game: GameState, enemy: Enemy, dt: number) {
+  const platformContactRadius = enemy.kind === 'pterodactyl' ? BIRD_RADIUS : PLATFORM_CONTACT_RADIUS
   const deltaX = enemy.kind === 'pterodactyl' ? game.player.x - enemy.x : wrappedDelta(enemy.x, game.player.x)
   let horizontal = Math.abs(deltaX) < 20 ? Math.sin(game.time * 2 + enemy.id) : Math.sign(deltaX)
-  let shouldFlap = !isGrounded(enemy, game.platforms)
+  let shouldFlap = !isGrounded(enemy, game.platforms, platformContactRadius)
   const platformUnderEnemy = game.platforms.find((platform) =>
-    Math.abs(enemy.y + BIRD_RADIUS - platform.y) <= 1 &&
+    Math.abs(enemy.y + platformContactRadius - platform.y) <= 1 &&
     enemy.x >= platform.x - BIRD_RADIUS &&
     enemy.x <= platform.x + platform.width + BIRD_RADIUS,
   )
 
-  if (platformUnderEnemy && game.player.y > platformUnderEnemy.y + BIRD_RADIUS &&
+  if (platformUnderEnemy && game.player.y > platformUnderEnemy.y + PLATFORM_CONTACT_RADIUS &&
       game.player.x >= platformUnderEnemy.x && game.player.x <= platformUnderEnemy.x + platformUnderEnemy.width) {
     const distanceToLeft = enemy.x - platformUnderEnemy.x
     const distanceToRight = platformUnderEnemy.x + platformUnderEnemy.width - enemy.x
@@ -235,7 +238,7 @@ function updateEnemy(game: GameState, enemy: Enemy, dt: number) {
   const flapBias = enemy.kind === 'pterodactyl' ? -0.1 : enemy.hatchLevel > 0 ? 0.1 : 0.35
   const flap = shouldFlap && (enemy.y > game.player.y + 6 || Math.sin(game.time * 1.7 + enemy.id * 0.8) > flapBias)
   const speedMultiplier = enemy.kind === 'pterodactyl' ? 1.4 : 1 + enemy.hatchLevel * 0.18
-  moveBird(enemy, { left: horizontal < -0.2, right: horizontal > 0.2, flap }, dt, game.platforms, speedMultiplier)
+  moveBird(enemy, { left: horizontal < -0.2, right: horizontal > 0.2, flap }, dt, game.platforms, speedMultiplier, platformContactRadius)
 }
 
 function dropEgg(game: GameState, enemy: Enemy) {

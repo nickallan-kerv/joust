@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#102e2a" />
+    <meta name="description" content="Inspect Joust sprite atlas crops, animation frames, and rider compositions." />
+    <title>Sprite Inspector | Joust</title>
+  </head>
+  <body>
+    <div class="inspector-shell">
+      <header class="topbar">
+        <a class="wordmark" href="/" aria-label="Return to Joust game">JOUST<span> / ART TOOLS</span></a>
+        <div class="heading-group">
+          <h1>Sprite Inspector</h1>
+        </div>
+        <a class="game-link" href="/">Return to game <span aria-hidden="true">↗</span></a>
+        <div class="edit-actions">
+          <button id="undo-button" class="icon-button" type="button" aria-label="Undo last edit" title="Undo last edit" disabled>↶</button>
+          <button id="save-button" class="save-button" type="button" disabled>Save JSON</button>
+        </div>
+      </header>
+
+      <main class="workbench">
+        <aside class="controls-panel" aria-label="Sprite controls">
+          <section class="control-group">
+            <h2>View</h2>
+            <div class="segmented" role="tablist" aria-label="Sprite view">
+              <button type="button" role="tab" aria-selected="true" data-mode="animation">Animation</button>
+              <button type="button" role="tab" aria-selected="false" data-mode="atlas">Atlas</button>
+            </div>
+          </section>
+
+          <section id="animation-controls" class="control-group">
+            <h2>Animation</h2>
+            <label for="mount-select">Mount</label>
+            <select id="mount-select">
+              <option value="player">Player</option>
+              <option value="bounder">Bounder</option>
+              <option value="hunter">Hunter</option>
+            </select>
+
+            <label>Motion</label>
+            <div class="segmented" role="group" aria-label="Motion state">
+              <button type="button" aria-pressed="true" data-motion="walk">Walk</button>
+              <button type="button" aria-pressed="false" data-motion="fly">Fly</button>
+            </div>
+
+            <label>Facing</label>
+            <div class="segmented compact" role="group" aria-label="Facing direction">
+              <button type="button" aria-pressed="false" data-facing="-1">← Left</button>
+              <button type="button" aria-pressed="true" data-facing="1">Right →</button>
+            </div>
+
+            <label class="check-row" for="composition-toggle">
+              <input id="composition-toggle" type="checkbox" checked />
+              <span>Show rider composition</span>
+            </label>
+          </section>
+
+          <section id="atlas-controls" class="control-group" hidden>
+            <h2>Atlas crop</h2>
+            <label for="atlas-frame-select">Atlas view</label>
+            <select id="atlas-frame-select" aria-label="Atlas view"></select>
+          </section>
+
+          <section class="control-group">
+            <h2>Playback</h2>
+            <div class="playback-row">
+              <button id="play-toggle" class="command-button" type="button" aria-label="Pause animation">Pause</button>
+              <button id="previous-frame" class="icon-button" type="button" aria-label="Previous frame" title="Previous frame">←</button>
+              <button id="next-frame" class="icon-button" type="button" aria-label="Next frame" title="Next frame">→</button>
+              <output id="frame-counter" for="frame-range">01 / 05</output>
+            </div>
+            <input id="frame-range" class="range-input" type="range" min="0" max="4" value="0" aria-label="Animation frame" />
+          </section>
+
+          <section class="control-group">
+            <h2>Display</h2>
+            <label class="range-label" for="zoom-range"><span>Magnification</span><output id="zoom-value">6×</output></label>
+            <input id="zoom-range" class="range-input" type="range" min="1" max="12" value="6" />
+            <label class="check-row" for="grid-toggle">
+              <input id="grid-toggle" type="checkbox" />
+              <span>Pixel grid</span>
+            </label>
+          </section>
+
+          <section class="control-group source-group">
+            <h2>Atlas image</h2>
+            <label class="file-button" for="image-file">Choose local image</label>
+            <input id="image-file" type="file" accept="image/*" />
+            <p id="image-status" class="status-line" role="status">Loading configured image…</p>
+          </section>
+        </aside>
+
+        <section class="preview-panel" aria-label="Magnified sprite preview">
+          <div class="preview-toolbar">
+            <div>
+              <p id="preview-kicker" class="eyebrow">PLAYER / WALK / RIGHT</p>
+              <h2 id="preview-title">Player walk</h2>
+            </div>
+            <span id="asset-kind" class="kind-label">ANIMATION</span>
+          </div>
+          <div id="canvas-viewport" class="canvas-viewport">
+            <canvas id="sprite-canvas" width="520" height="400" aria-label="Magnified sprite rendering"></canvas>
+            <div id="empty-state" class="empty-state" hidden>
+              <span class="empty-mark" aria-hidden="true">!</span>
+              <p>Atlas image unavailable</p>
+              <span>Choose a local image to continue reviewing crops.</span>
+            </div>
+          </div>
+          <div class="preview-footer">
+            <span id="image-dimensions">ATLAS 608 × 512</span>
+            <span id="atlas-reference">608 × 512 px · image dimensions will be checked when loaded</span>
+            <span id="preview-note">Source pixels enlarged with nearest-neighbor scaling</span>
+          </div>
+        </section>
+
+        <aside class="details-panel" aria-label="Sprite mapping details">
+          <section class="details-block">
+            <p class="eyebrow">EDIT MAPPING</p>
+            <h2 id="details-title">Player walk right</h2>
+            <code id="source-file" class="source-file">animation-player.json</code>
+            <dl id="mapping-details" class="mapping-details"></dl>
+            <p id="composition-note" class="detail-note">Player rider frames use native left/right facings; their crops, draw size, and placement are editable here.</p>
+            <p id="editor-status" class="editor-status" role="status">No unsaved edits</p>
+          </section>
+        </aside>
+      </main>
+    </div>
+    <script type="module" src="/sprite-inspector/sprite-inspector.ts"></script>
+  </body>
+</html>

@@ -2,7 +2,7 @@ import type { InputState } from './types'
 
 export function createKeyboardInput() {
   const pressedKeys = new Set<string>()
-  const preventedKeys = new Set(['ArrowLeft', 'ArrowRight', 'Space'])
+  const preventedKeys = new Set(['ArrowLeft', 'ArrowRight', 'Space', 'KeyZ'])
   let startQueued = false
   let flapQueued = false
   let facingQueued: -1 | 1 | undefined
@@ -10,7 +10,7 @@ export function createKeyboardInput() {
   function onKeyDown(event: KeyboardEvent) {
     if (preventedKeys.has(event.code)) event.preventDefault()
     if (event.code === 'Enter' && !event.repeat) startQueued = true
-    if (event.code === 'Space' && !event.repeat && !pressedKeys.has('Space')) flapQueued = true
+    if (event.code === 'KeyZ' && !event.repeat && !pressedKeys.has('KeyZ')) flapQueued = true
     if (!event.repeat && (event.code === 'ArrowLeft' || event.code === 'KeyA')) facingQueued = -1
     if (!event.repeat && (event.code === 'ArrowRight' || event.code === 'KeyD')) facingQueued = 1
     pressedKeys.add(event.code)

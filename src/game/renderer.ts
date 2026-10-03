@@ -1,5 +1,5 @@
-import { EGG_HATCH_TIME, EGG_RADIUS, GAME_HEIGHT, GAME_WIDTH, isGrounded, LAVA_PITS, LAVA_Y, SPAWN_POINTS } from './simulation'
-import { getMountFrame, getRiderFrame, getRiderSpriteFacing, type MountClass } from './sprite-mapping'
+import { BIRD_RADIUS, EGG_HATCH_TIME, EGG_RADIUS, GAME_HEIGHT, GAME_WIDTH, isGrounded, LAVA_PITS, LAVA_Y, PLATFORM_CONTACT_RADIUS, SPAWN_POINTS } from './simulation'
+import { getMountFrame, getPlatformFrame, getRiderFrame, getRiderHorizontalOffset, getRiderSpriteFacing, getSpriteAtlasImage, getSpriteAtlasWidth, getSpriteBlendMode, getSpriteComposition, type MountClass } from './sprite-mapping'
 import type { Bird, Egg, Enemy, GameState } from './types'
 
 const PLATFORM_COLOR = '#91c6a1'
@@ -10,7 +10,7 @@ const spriteImage = new Image()
 spriteImage.onload = () => {
   spriteAtlas = spriteImage
 }
-spriteImage.src = 'https://i.pinimg.com/originals/85/18/64/851864d48f862c473596aac08957707d.jpg'
+spriteImage.src = getSpriteAtlasImage()
 
 function drawAtlasFrame(
   context: CanvasRenderingContext2D,
@@ -23,7 +23,7 @@ function drawAtlasFrame(
 ) {
   if (!spriteAtlas) return false
   context.save()
-  context.globalCompositeOperation = 'screen'
+  context.globalCompositeOperation = getSpriteBlendMode()
   if (mirrorHorizontally) {
     context.translate(x, y)
     context.scale(-1, 1)
@@ -106,6 +106,36 @@ function drawBackground(context: CanvasRenderingContext2D) {
 
 function drawPlatforms(context: CanvasRenderingContext2D, game: GameState) {
   for (const platform of game.platforms) {
+    if (spriteAtlas) {
+      const source = getPlatformFrame(Boolean(platform.burnsAway))
+      const sourceScaleX = GAME_WIDTH / getSpriteAtlasWidth()
+      const tileWidth = source.width * sourceScaleX
+      const destinationHeight = platform.height
+      let x = platform.x
+
+      context.save()
+      context.globalCompositeOperation = getSpriteBlendMode()
+      context.imageSmoothingEnabled = false
+      while (x < platform.x + platform.width) {
+        const width = Math.min(tileWidth, platform.x + platform.width - x)
+        const sourceWidth = width / sourceScaleX
+        context.drawImage(
+          spriteAtlas,
+          source.x,
+          source.y,
+          sourceWidth,
+          source.height,
+          x,
+          platform.y,
+          width,
+          destinationHeight,
+        )
+        x += tileWidth
+      }
+      context.restore()
+      continue
+    }
+
     context.fillStyle = 'rgba(4, 20, 18, 0.36)'
     context.fillRect(platform.x, platform.y + platform.height, platform.width, 7)
     context.fillStyle = platform.burnsAway ? '#765c3d' : '#23594c'
@@ -211,13 +241,14 @@ function drawBird(
   flying: boolean,
   mountClass: MountClass,
 ) {
+  const composition = getSpriteComposition(mountClass)
   const moving = Math.abs(bird.vx) > 8
   const frame = getMountFrame(mountClass, bird.facing, flying, moving, Math.floor(time * (flying ? 10 : 8)))
-  if (drawAtlasFrame(context, frame, bird.x, bird.y, false, 66, 56)) {
+  if (drawAtlasFrame(context, frame, bird.x, bird.y, false, composition.mountSize.width, composition.mountSize.height)) {
     const rider = getRiderFrame(mountClass, bird.facing)
-    const riderWidth = mountClass === 'player' ? 28 : 38
-    const riderHeight = mountClass === 'player' ? 42 : 42
-    drawAtlasFrame(context, rider, bird.x, bird.y - 15, getRiderSpriteFacing(mountClass, bird.facing) < 0, riderWidth, riderHeight)
+    const riderX = bird.x + getRiderHorizontalOffset(mountClass, bird.facing)
+    const riderSize = composition.riderSize
+    drawAtlasFrame(context, rider, riderX, bird.y + composition.riderYOffset, getRiderSpriteFacing(mountClass, bird.facing) < 0, riderSize.width, riderSize.height)
     return
   }
 
@@ -309,7 +340,7 @@ function drawOverlay(context: CanvasRenderingContext2D, game: GameState) {
     context.fillText('FLAP TO CLIMB. STRIKE FROM ABOVE.', GAME_WIDTH / 2, 292)
     context.fillStyle = '#d9ee65'
     context.font = "500 12px 'DM Mono', monospace"
-    context.fillText('← / → MOVE     SPACE FLAP     ENTER START', GAME_WIDTH / 2, 357)
+    context.fillText('← / → MOVE     Z FLAP     ENTER START', GAME_WIDTH / 2, 357)
   } else {
     context.fillStyle = '#e96e4b'
     context.font = "500 13px 'DM Mono', monospace"
@@ -338,7 +369,8 @@ export function renderGame(context: CanvasRenderingContext2D, game: GameState) {
 
   for (const egg of game.eggs) drawEgg(context, egg)
   for (const enemy of game.enemies) {
-    const flying = !isGrounded(enemy, game.platforms)
+    const platformContactRadius = enemy.kind === 'pterodactyl' ? BIRD_RADIUS : PLATFORM_CONTACT_RADIUS
+    const flying = !isGrounded(enemy, game.platforms, platformContactRadius)
     if (enemy.kind === 'pterodactyl') drawPterodactyl(context, enemy, game.time, flying)
     else drawBird(context, enemy, '#d55f49', game.time, false, flying, enemy.hatchLevel > 0 ? 'hunter' : 'bounder')
   }

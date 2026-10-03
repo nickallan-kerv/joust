@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 *.local
+*.json.bak
 coverage/
 test-results/
 playwright-report/
@@ -21,6 +22,8 @@ public/assets/joust-sprites Validation.png
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
 .idea
 .DS_Store
 *.suo

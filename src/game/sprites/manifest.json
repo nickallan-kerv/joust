@@ -1,0 +1,4 @@
+{
+  "atlases": ["atlas-joust.json"],
+  "animations": ["animation-player.json", "animation-bounder.json", "animation-hunter.json"]
+}

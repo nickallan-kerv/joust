@@ -6,6 +6,7 @@ import {
   isGrounded,
   LAVA_Y,
   PTERODACTYL_DELAY,
+  PLATFORM_CONTACT_RADIUS,
   resolveJoust,
   startGame,
   stepGame,
@@ -43,13 +44,19 @@ describe('flight simulation', () => {
     startGame(game)
     game.enemies = []
     game.player.x = 480
-    game.player.y = 365
+    game.player.y = 380
     game.player.vy = -220
 
     stepGame(game, noInput, 0.1)
 
-    expect(game.player.y).toBe(330 + 14 + 19)
+    const platform = game.platforms.find(({ y }) => y === 330)
+    if (!platform) throw new Error('Expected a center platform.')
+    expect(game.player.y).toBe(platform.y + platform.height + PLATFORM_CONTACT_RADIUS)
     expect(game.player.vy).toBeGreaterThan(0)
+  })
+
+  it('uses the atlas height for platform and lava-cover colliders', () => {
+    expect(createGameState().platforms.every(({ height }) => height === 15)).toBe(true)
   })
 
   it('bounces downward after hitting the top of the screen', () => {
@@ -89,7 +96,7 @@ describe('flight simulation', () => {
     const enemy = game.enemies[0]
     if (!enemy) throw new Error('Expected a spawned enemy.')
     enemy.x = 100
-    enemy.y = 273
+    enemy.y = 292 - PLATFORM_CONTACT_RADIUS
     enemy.vy = 0
 
     expect(isGrounded(enemy, game.platforms)).toBe(true)
@@ -104,7 +111,7 @@ describe('flight simulation', () => {
     const enemy = game.enemies[0]
     if (!enemy) throw new Error('Expected a spawned enemy.')
     enemy.x = 480
-    enemy.y = 166
+    enemy.y = 185 - PLATFORM_CONTACT_RADIUS
     enemy.vx = 0
     enemy.vy = 0
     enemy.flapCooldown = 1
@@ -182,7 +189,7 @@ describe('flight simulation', () => {
     const game = createGameState()
     startGame(game)
     game.player.x = 480
-    game.player.y = 423
+    game.player.y = 442 - PLATFORM_CONTACT_RADIUS
     game.player.vx = 200
     game.player.vy = 0
 
@@ -196,7 +203,7 @@ describe('flight simulation', () => {
     const game = createGameState()
     startGame(game)
     game.player.x = 480
-    game.player.y = 423
+    game.player.y = 442 - PLATFORM_CONTACT_RADIUS
     game.player.vx = 200
     game.player.vy = 0
 
@@ -210,7 +217,7 @@ describe('flight simulation', () => {
     const groundedGame = createGameState()
     startGame(groundedGame)
     groundedGame.player.x = 480
-    groundedGame.player.y = 423
+    groundedGame.player.y = 442 - PLATFORM_CONTACT_RADIUS
     groundedGame.player.vy = 0
 
     const airborneGame = createGameState()
@@ -240,7 +247,7 @@ describe('flight simulation', () => {
     startGame(groundedGame)
     groundedGame.enemies = []
     groundedGame.player.x = 480
-    groundedGame.player.y = 423
+    groundedGame.player.y = 442 - PLATFORM_CONTACT_RADIUS
     groundedGame.player.vy = 0
 
     const airborneGame = createGameState()
@@ -421,7 +428,7 @@ describe('flight simulation', () => {
     game.wave = 2
     game.enemies = []
     game.player.x = 480
-    game.player.y = 423
+    game.player.y = 442 - PLATFORM_CONTACT_RADIUS
     game.player.vy = 0
     stepGame(game, noInput, 1.1)
 

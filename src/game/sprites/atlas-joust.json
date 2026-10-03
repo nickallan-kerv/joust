@@ -1,0 +1,63 @@
+{
+  "id": "joust",
+  "image": "https://i.pinimg.com/originals/85/18/64/851864d48f862c473596aac08957707d.jpg",
+  "width": 608,
+  "height": 512,
+  "blendMode": "screen",
+  "frames": {
+    "playerIcon": {
+      "x": 530,
+      "y": 386,
+      "width": 12,
+      "height": 18
+    },
+    "riderPlayerRight": {
+      "x": 398,
+      "y": 207,
+      "width": 34,
+      "height": 38
+    },
+    "riderPlayerLeft": {
+      "x": 438,
+      "y": 207,
+      "width": 34,
+      "height": 38
+    },
+    "riderBounderLeft": {
+      "x": 108,
+      "y": 247,
+      "width": 34,
+      "height": 38
+    },
+    "riderBounderRight": {
+      "x": 63,
+      "y": 247,
+      "width": 34,
+      "height": 38
+    },
+    "riderHunterLeft": {
+      "x": 182,
+      "y": 250,
+      "width": 34,
+      "height": 38
+    },
+    "riderHunterRight": {
+      "x": 144,
+      "y": 250,
+      "width": 34,
+      "height": 38
+    },
+    "platformStandard": {
+      "x": 130,
+      "y": 29,
+      "width": 93,
+      "height": 15
+    },
+    "platformCover": {
+      "x": 0,
+      "y": 0,
+      "width": 68,
+      "height": 15
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "id": "bounder",
+  "atlas": "joust",
+  "strips": {
+    "walkRight": {
+      "x": 384,
+      "y": 117,
+      "frameWidth": 42,
+      "frameHeight": 40,
+      "count": 5
+    },
+    "flyRight": {
+      "x": 0,
+      "y": 167,
+      "frameWidth": 42,
+      "frameHeight": 40,
+      "count": 2
+    },
+    "walkLeft": {
+      "x": 85,
+      "y": 167,
+      "frameWidth": 40,
+      "frameHeight": 40,
+      "count": 5
+    },
+    "flyLeft": {
+      "x": 294,
+      "y": 167,
+      "frameWidth": 42,
+      "frameHeight": 40,
+      "count": 2
+    }
+  },
+  "idleWalkFrame": 2,
+  "riderFrames": {
+    "left": "riderBounderLeft",
+    "right": "riderBounderRight"
+  },
+  "riderFacing": "native",
+  "riderOffset": {
+    "left": 0,
+    "right": 5
+  },
+  "composition": {
+    "mountSize": {
+      "width": 66,
+      "height": 56
+    },
+    "riderSize": {
+      "width": 38,
+      "height": 42
+    },
+    "riderYOffset": -15
+  }
+}
