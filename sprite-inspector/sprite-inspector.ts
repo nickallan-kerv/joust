@@ -408,6 +408,12 @@ function updateDetails() {
       }
       decrement.addEventListener('click', () => stepBy(-1))
       increment.addEventListener('click', () => stepBy(1))
+      for (const button of [decrement, increment]) {
+        // Stop playback re-rendering the panel between pointerdown and click.
+        button.addEventListener('pointerdown', pauseForMappingEdit)
+        button.addEventListener('pointerup', resumeAfterEditDelay)
+        button.addEventListener('pointercancel', resumeAfterEditDelay)
+      }
       input.addEventListener('focus', () => {
         input.dataset.previous = String(getPathValue(editorDocument, editor.path))
         pauseForMappingEdit()
