@@ -12,52 +12,52 @@
       "height": 18
     },
     "riderPlayerRight": {
-      "x": 398,
-      "y": 207,
-      "width": 34,
-      "height": 38
+      "x": 401,
+      "y": 217,
+      "width": 28,
+      "height": 14
     },
     "riderPlayerLeft": {
-      "x": 438,
-      "y": 207,
-      "width": 34,
-      "height": 38
+      "x": 443,
+      "y": 217,
+      "width": 24,
+      "height": 14
     },
     "riderBounderLeft": {
-      "x": 108,
-      "y": 247,
-      "width": 34,
-      "height": 38
+      "x": 109,
+      "y": 255,
+      "width": 24,
+      "height": 14
     },
     "riderBounderRight": {
-      "x": 63,
-      "y": 247,
-      "width": 34,
-      "height": 38
+      "x": 71,
+      "y": 255,
+      "width": 24,
+      "height": 14
     },
     "riderHunterLeft": {
-      "x": 182,
-      "y": 250,
-      "width": 34,
-      "height": 38
+      "x": 177,
+      "y": 255,
+      "width": 24,
+      "height": 14
     },
     "riderHunterRight": {
-      "x": 144,
-      "y": 250,
-      "width": 34,
-      "height": 38
+      "x": 215,
+      "y": 255,
+      "width": 24,
+      "height": 14
     },
     "platformStandard": {
-      "x": 130,
+      "x": 131,
       "y": 29,
-      "width": 93,
-      "height": 15
+      "width": 92,
+      "height": 14
     },
     "platformCover": {
-      "x": 0,
-      "y": 0,
-      "width": 68,
-      "height": 15
+      "x": 1,
+      "y": 1,
+      "width": 66,
+      "height": 14
     }
   }
 }
