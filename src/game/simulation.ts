@@ -12,27 +12,63 @@ export const LAVA_PITS = [
 export const EGG_RADIUS = 8
 export const EGG_HATCH_TIME = 7
 export const PTERODACTYL_DELAY = 18
-const GRAVITY = 780
-const MAX_FALL_SPEED = 430
-const FLAP_COOLDOWN = 0.16
+export const MOUNT_DEPARTURE_DURATION = 1.25
+export const BIRD_MATERIALIZE_DURATION = 1
+export const LAVA_PLATFORM_DISSOLVE_DURATION = 3
+const GRAVITY = 1150
+const MAX_FALL_SPEED = 540
+const FLAP_COOLDOWN = 0.14
+const AI_FLAP_COOLDOWN = 0.24
+const FLAP_IMPULSE = 520
+const MAX_RISE_SPEED = 520
+const AI_FLAP_IMPULSE = 430
+const AI_MAX_RISE_SPEED = 440
+const HATCH_MOUNT_ARRIVAL_SPEED = 300
+type EnemyBehavior = 'bounder' | 'hunter' | 'pterodactyl'
+
+const AI_AIR_ACCELERATION: Record<EnemyBehavior, number> = {
+  bounder: 105,
+  hunter: 145,
+  pterodactyl: 168,
+}
+const AI_TURN_HOLD: Record<EnemyBehavior, { minimum: number; range: number }> = {
+  bounder: { minimum: 2.2, range: 3.4 },
+  hunter: { minimum: 1.1, range: 1.8 },
+  pterodactyl: { minimum: 1.8, range: 2.5 },
+}
+
+function getEnemyBehavior(enemy: Enemy): EnemyBehavior {
+  if (enemy.kind === 'pterodactyl') return 'pterodactyl'
+  return enemy.hatchLevel > 0 ? 'hunter' : 'bounder'
+}
+function enemyVariation(id: number, step: number, salt: number): number {
+  const value = Math.sin((id + 1) * 127.1 + (step + 1) * 311.7 + salt * 74.7) * 43758.5453
+  return value - Math.floor(value)
+}
+
 const PLATFORM_LAYOUT: Platform[] = [
-  { x: 240, y: 442, width: 480, height: 15 },
-  { x: 0, y: 165, width: 160, height: 15 },
-  { x: 260, y: 185, width: 440, height: 15 },
-  { x: 800, y: 165, width: 160, height: 15 },
-  { x: 0, y: 292, width: 200, height: 15 },
-  { x: 760, y: 276, width: 200, height: 15 },
-  { x: 333, y: 330, width: 294, height: 15 },
+  { x: 240, y: 442, width: 480, height: 7, sprite: 'platformLong', spawnMarkerArt: true },
+  { x: 0, y: 125, width: 104, height: 22, sprite: 'platformCover' },
+  { x: 812, y: 125, width: 148, height: 22, sprite: 'platformAlternate' },
+  { x: 271, y: 145, width: 278, height: 28, sprite: 'platformSpawnWide', spawnMarkerArt: true },
+  { x: 0, y: 292, width: 200, height: 25, sprite: 'platformSpawnNarrow', spawnMarkerArt: true },
+  { x: 660, y: 256, width: 184, height: 35, sprite: 'platformSpawnTall', spawnMarkerArt: true },
+  { x: 327, y: 312, width: 202, height: 25, sprite: 'platformNoSpawn' },
+  { x: 815, y: 292, width: 145, height: 22, sprite: 'platformStandard' },
+  { x: 241, y: 449, width: 51, height: 38, sprite: 'platformShortLeft' },
+  { x: 668, y: 449, width: 51, height: 41, sprite: 'platformShortRight' },
 ]
 export const SPAWN_POINTS = [
-  { x: 410, y: 150, markerY: 185 },
-  { x: 105, y: 257, markerY: 292 },
-  { x: 820, y: 241, markerY: 276 },
-  { x: 480, y: 407, markerY: 442 },
+  { x: 378, y: 117, markerY: 145 },
+  { x: 86, y: 264, markerY: 292 },
+  { x: 773, y: 228, markerY: 256 },
+  { x: 445, y: 414, markerY: 442 },
 ]
+export const PLAYER_SPAWN_POINT = SPAWN_POINTS[3]
+const ENEMY_SPAWN_POINTS = SPAWN_POINTS.slice(0, 3)
 const LAVA_COVERS: Platform[] = [
-  { x: 0, y: 442, width: 240, height: 15, burnsAway: true },
-  { x: 720, y: 442, width: 240, height: 15, burnsAway: true },
+  { x: 0, y: 442, width: 240, height: 15, burnsAway: true, sprite: 'platformCover' },
+  { x: 720, y: 442, width: 240, height: 15, burnsAway: true, sprite: 'platformCover' },
 ]
 
 function makeBird(x: number, y: number, facing: -1 | 1): Bird {
@@ -46,6 +82,7 @@ function makeBird(x: number, y: number, facing: -1 | 1): Bird {
     collisionCooldown: 0,
     reboundTimer: 0,
     invulnerability: 0,
+    materializeTimer: BIRD_MATERIALIZE_DURATION,
   }
 }
 
@@ -59,9 +96,11 @@ export function createGameState(): GameState {
     time: 0,
     wave: 0,
     waveDelay: 0,
-    player: { ...makeBird(GAME_WIDTH / 2, 130, 1), score: 0, lives: 3 },
+    player: { ...makeBird(GAME_WIDTH / 2, 130, 1), materializeTimer: 0, score: 0, lives: 4 },
     enemies: [],
     eggs: [],
+    mountDepartures: [],
+    playerRespawnTimer: 0,
     platforms: platformsForWave(1),
     message: '',
     messageTimer: 0,
@@ -75,10 +114,10 @@ function spawnWave(game: GameState) {
   game.wave += 1
   game.waveDelay = 0
   game.platforms = platformsForWave(game.wave)
-  const count = Math.min(2 + Math.floor((game.wave - 1) / 2), SPAWN_POINTS.length)
+  const count = Math.min(2 + Math.floor((game.wave - 1) / 2), ENEMY_SPAWN_POINTS.length)
 
   game.enemies = Array.from({ length: count }, (_, index) => {
-    const spawnPoint = SPAWN_POINTS[(game.wave - 1 + index) % SPAWN_POINTS.length]
+    const spawnPoint = ENEMY_SPAWN_POINTS[(game.wave - 1 + index) % ENEMY_SPAWN_POINTS.length]
     const facing: -1 | 1 = spawnPoint.x < GAME_WIDTH / 2 ? 1 : -1
     return {
       ...makeBird(spawnPoint.x, spawnPoint.y, facing),
@@ -95,6 +134,9 @@ export function startGame(game: GameState) {
   const fresh = createGameState()
   Object.assign(game, fresh)
   game.mode = 'playing'
+  game.player.x = PLAYER_SPAWN_POINT.x
+  game.player.y = PLAYER_SPAWN_POINT.y
+  game.player.materializeTimer = BIRD_MATERIALIZE_DURATION
   spawnWave(game)
 }
 
@@ -105,10 +147,10 @@ export function resolveJoust(playerY: number, enemyY: number): 'player' | 'enemy
   return 'tie'
 }
 
-export function flapBird(bird: Bird) {
+export function flapBird(bird: Bird, impulse = FLAP_IMPULSE, maxRiseSpeed = MAX_RISE_SPEED, cooldown = FLAP_COOLDOWN) {
   if (bird.flapCooldown > 0) return
-  bird.vy = Math.max(bird.vy - 320, -360)
-  bird.flapCooldown = FLAP_COOLDOWN
+  bird.vy = Math.max(bird.vy - impulse, -maxRiseSpeed)
+  bird.flapCooldown = cooldown
 }
 
 function wrappedDelta(from: number, to: number) {
@@ -130,26 +172,49 @@ export function isGrounded(bird: Bird, platforms: Platform[], platformContactRad
   )
 }
 
-function landOnPlatforms(bird: Bird, previousY: number, platforms: Platform[], platformContactRadius: number) {
-  if (bird.vy < 0) {
-    for (const platform of platforms) {
-      const crossedUnderside = previousY - platformContactRadius >= platform.y + platform.height && bird.y - platformContactRadius <= platform.y + platform.height
-      const underPlatform = bird.x >= platform.x - BIRD_RADIUS && bird.x <= platform.x + platform.width + BIRD_RADIUS
-      if (!crossedUnderside || !underPlatform) continue
-      bird.y = platform.y + platform.height + platformContactRadius
-      bird.vy = Math.max(90, Math.abs(bird.vy) * 0.42)
-      return
-    }
-    return
-  }
+function landOnPlatforms(bird: Bird, previousX: number, previousY: number, platforms: Platform[], platformContactRadius: number) {
+  const horizontalDelta = bird.x - previousX
+  const canCheckSides = horizontalDelta !== 0 && Math.abs(horizontalDelta) <= GAME_WIDTH / 2
+  const movingRight = horizontalDelta > 0
+  let sideCollision = false
 
   for (const platform of platforms) {
-    const crossedPlatform = previousY + platformContactRadius <= platform.y && bird.y + platformContactRadius >= platform.y
-    const abovePlatform = bird.x >= platform.x - BIRD_RADIUS && bird.x <= platform.x + platform.width + BIRD_RADIUS
-    if (!crossedPlatform || !abovePlatform) continue
-    bird.y = platform.y - platformContactRadius
-    bird.vy = 0
-    return
+    if (bird.vy < 0) {
+      const crossedUnderside = previousY - platformContactRadius >= platform.y + platform.height && bird.y - platformContactRadius <= platform.y + platform.height
+      const underPlatform = bird.x >= platform.x - BIRD_RADIUS && bird.x <= platform.x + platform.width + BIRD_RADIUS
+      if (crossedUnderside && underPlatform) {
+        bird.y = platform.y + platform.height + platformContactRadius
+        bird.vy = Math.max(90, Math.abs(bird.vy) * 0.42)
+        return
+      }
+    } else {
+      const crossedPlatform = previousY + platformContactRadius <= platform.y && bird.y + platformContactRadius >= platform.y
+      const abovePlatform = bird.x >= platform.x - BIRD_RADIUS && bird.x <= platform.x + platform.width + BIRD_RADIUS
+      if (crossedPlatform && abovePlatform) {
+        bird.y = platform.y - platformContactRadius
+        bird.vy = 0
+        return
+      }
+    }
+
+    if (!canCheckSides || sideCollision) continue
+    const previousEdge = previousX + (movingRight ? BIRD_RADIUS : -BIRD_RADIUS)
+    const currentEdge = bird.x + (movingRight ? BIRD_RADIUS : -BIRD_RADIUS)
+    const platformEdge = movingRight ? platform.x : platform.x + platform.width
+    const crossedSide = movingRight
+      ? previousEdge <= platformEdge && currentEdge >= platformEdge
+      : previousEdge >= platformEdge && currentEdge <= platformEdge
+    if (!crossedSide) continue
+
+    const impactTime = (platformEdge - previousEdge) / horizontalDelta
+    const impactY = previousY + (bird.y - previousY) * impactTime
+    const overlapsVertically = impactY + platformContactRadius > platform.y &&
+      impactY - platformContactRadius < platform.y + platform.height
+    if (!overlapsVertically) continue
+
+    bird.x = movingRight ? platform.x - BIRD_RADIUS : platform.x + platform.width + BIRD_RADIUS
+    bird.vx = 0
+    sideCollision = true
   }
 }
 
@@ -160,30 +225,45 @@ function moveBird(
   platforms: Platform[],
   speedMultiplier = 1,
   platformContactRadius = PLATFORM_CONTACT_RADIUS,
+  flapImpulse = FLAP_IMPULSE,
+  maxRiseSpeed = MAX_RISE_SPEED,
+  flapCooldown = FLAP_COOLDOWN,
+  airAcceleration = 260,
 ) {
+  if (bird.materializeTimer > 0) {
+    const direction = Number(input.right) - Number(input.left) || input.facingPress || 0
+    if (direction !== 0) bird.facing = direction < 0 ? -1 : 1
+    bird.materializeTimer = Math.max(0, bird.materializeTimer - dt)
+    bird.vx = 0
+    bird.vy = 0
+    return
+  }
+
+  const previousX = bird.x
   const previousY = bird.y
   const grounded = isGrounded(bird, platforms, platformContactRadius)
   const heldDirection = Number(input.right) - Number(input.left)
   const direction = heldDirection !== 0 ? heldDirection : input.facingPress ?? 0
 
   if (direction !== 0) {
-    const acceleration = grounded ? 1200 : 520
+    const acceleration = grounded ? 1200 : airAcceleration
     bird.vx += direction * acceleration * speedMultiplier * dt
     bird.facing = direction < 0 ? -1 : 1
     if (grounded && bird.vx * direction > 0) bird.vx *= Math.exp(-0.35 * dt)
   } else {
-    bird.vx *= Math.exp(-(grounded ? 8.5 : 1.4) * dt)
+    bird.vx *= Math.exp(-(grounded ? 8.5 : 0.9) * dt)
   }
 
-  const normalMaxSpeed = (grounded ? 320 : 245) * speedMultiplier
+  const normalMaxSpeed = (grounded ? 320 : 190) * speedMultiplier
   bird.reboundTimer = Math.max(0, bird.reboundTimer - dt)
   const reboundMaxSpeed = Math.min(Math.abs(bird.vx), 620 * speedMultiplier)
   const maxSpeed = bird.reboundTimer > 0 ? Math.max(normalMaxSpeed, reboundMaxSpeed) : normalMaxSpeed
   bird.vx = Math.max(-maxSpeed, Math.min(maxSpeed, bird.vx))
-  if (input.flap) flapBird(bird)
+  if (input.flap) flapBird(bird, flapImpulse, maxRiseSpeed, flapCooldown)
   bird.flapCooldown = Math.max(0, bird.flapCooldown - dt)
   bird.collisionCooldown = Math.max(0, bird.collisionCooldown - dt)
   bird.invulnerability = Math.max(0, bird.invulnerability - dt)
+  bird.materializeTimer = Math.max(0, bird.materializeTimer - dt)
   bird.vy = Math.min(MAX_FALL_SPEED, bird.vy + GRAVITY * dt)
   bird.x += bird.vx * dt
   bird.y += bird.vy * dt
@@ -195,13 +275,45 @@ function moveBird(
     bird.vy = Math.max(90, Math.abs(bird.vy) * 0.42)
   }
 
-  landOnPlatforms(bird, previousY, platforms, platformContactRadius)
+  landOnPlatforms(bird, previousX, previousY, platforms, platformContactRadius)
 }
 
-function loseLife(game: GameState, message: string) {
+function respawnPlayer(game: GameState) {
+  Object.assign(game.player, makeBird(PLAYER_SPAWN_POINT.x, PLAYER_SPAWN_POINT.y, 1), {
+    score: game.player.score,
+    lives: game.player.lives,
+    invulnerability: 1.3,
+  })
+}
+
+function addMountDeparture(game: GameState, bird: Bird, mountClass: GameState['mountDepartures'][number]['mountClass']) {
+  game.mountDepartures.push({
+    x: bird.x,
+    y: bird.y,
+    facing: bird.facing,
+    mountClass,
+    age: 0,
+  })
+}
+
+function updateMountDepartures(game: GameState, dt: number) {
+  for (const departure of game.mountDepartures) departure.age += dt
+  game.mountDepartures = game.mountDepartures.filter((departure) => departure.age < MOUNT_DEPARTURE_DURATION)
+
+  if (game.playerRespawnTimer <= 0) return
+  game.playerRespawnTimer = Math.max(0, game.playerRespawnTimer - dt)
+  if (game.playerRespawnTimer === 0 && game.mode === 'playing') respawnPlayer(game)
+}
+
+function loseLife(game: GameState, message: string, flyMountOff = false) {
   game.player.lives -= 1
   game.message = game.player.lives > 0 ? message : 'GAME OVER'
   game.messageTimer = 1.5
+
+  if (flyMountOff) {
+    addMountDeparture(game, game.player, 'player')
+    game.playerRespawnTimer = MOUNT_DEPARTURE_DURATION
+  }
 
   if (game.player.lives <= 0) {
     game.player.lives = 0
@@ -209,17 +321,50 @@ function loseLife(game: GameState, message: string) {
     return
   }
 
-  Object.assign(game.player, makeBird(GAME_WIDTH / 2, 118, 1), {
-    score: game.player.score,
-    lives: game.player.lives,
-    invulnerability: 1.3,
-  })
+  if (!flyMountOff) respawnPlayer(game)
 }
 
 function updateEnemy(game: GameState, enemy: Enemy, dt: number) {
+  if (enemy.mountArrivalX !== undefined && enemy.mountArrivalDirection !== undefined) {
+    const arrivalX = enemy.mountArrivalX + enemy.mountArrivalDirection * HATCH_MOUNT_ARRIVAL_SPEED * dt
+    const hasArrived = enemy.mountArrivalDirection > 0 ? arrivalX >= enemy.x : arrivalX <= enemy.x
+    if (hasArrived) {
+      delete enemy.mountArrivalX
+      delete enemy.mountArrivalDirection
+      enemy.vx = 0
+      enemy.vy = 0
+    } else {
+      enemy.mountArrivalX = arrivalX
+      return
+    }
+  }
+
+  const behavior = getEnemyBehavior(enemy)
   const platformContactRadius = enemy.kind === 'pterodactyl' ? BIRD_RADIUS : PLATFORM_CONTACT_RADIUS
   const deltaX = enemy.kind === 'pterodactyl' ? game.player.x - enemy.x : wrappedDelta(enemy.x, game.player.x)
-  let horizontal = Math.abs(deltaX) < 20 ? Math.sin(game.time * 2 + enemy.id) : Math.sign(deltaX)
+  const currentDirection = Math.abs(enemy.vx) > 12 ? Math.sign(enemy.vx) : enemy.facing
+  let horizontal = enemy.flightDirection ?? currentDirection
+  let flightTimer = enemy.flightTimer ?? 0
+  let flightDecision = enemy.flightDecision ?? 0
+  if (flightTimer <= 0) {
+    flightDecision += 1
+    const variation = enemyVariation(enemy.id, flightDecision, 1)
+    const targetDirection = Math.abs(deltaX) < 56 ? 0 : Math.sign(deltaX)
+    if (targetDirection === 0) {
+      horizontal = Math.abs(enemy.vx) > 12 ? currentDirection : variation < 0.5 ? -1 : 1
+    } else {
+      const wanderChance = behavior === 'bounder' ? 0.45 : behavior === 'hunter' ? 0.05 : 0
+      horizontal = variation < wanderChance ? currentDirection : targetDirection
+    }
+
+    const hold = AI_TURN_HOLD[behavior]
+    flightTimer = hold.minimum + enemyVariation(enemy.id, flightDecision, 4) * hold.range
+  }
+  flightTimer = Math.max(0, flightTimer - dt)
+  enemy.flightDirection = horizontal as -1 | 1
+  enemy.flightTimer = flightTimer
+  enemy.flightDecision = flightDecision
+
   let shouldFlap = !isGrounded(enemy, game.platforms, platformContactRadius)
   const platformUnderEnemy = game.platforms.find((platform) =>
     Math.abs(enemy.y + platformContactRadius - platform.y) <= 1 &&
@@ -232,21 +377,36 @@ function updateEnemy(game: GameState, enemy: Enemy, dt: number) {
     const distanceToLeft = enemy.x - platformUnderEnemy.x
     const distanceToRight = platformUnderEnemy.x + platformUnderEnemy.width - enemy.x
     horizontal = distanceToLeft < distanceToRight ? -1 : 1
+    enemy.flightDirection = horizontal as -1 | 1
+    enemy.flightTimer = 0.55
     shouldFlap = false
   }
 
-  const flapBias = enemy.kind === 'pterodactyl' ? -0.1 : enemy.hatchLevel > 0 ? 0.1 : 0.35
-  const flap = shouldFlap && (enemy.y > game.player.y + 6 || Math.sin(game.time * 1.7 + enemy.id * 0.8) > flapBias)
-  const speedMultiplier = enemy.kind === 'pterodactyl' ? 1.4 : 1 + enemy.hatchLevel * 0.18
-  moveBird(enemy, { left: horizontal < -0.2, right: horizontal > 0.2, flap }, dt, game.platforms, speedMultiplier, platformContactRadius)
+  const blockedByPlatform = game.platforms.some((platform) => {
+    const verticalOverlap = enemy.y + platformContactRadius > platform.y &&
+      enemy.y - platformContactRadius < platform.y + platform.height
+    const blockedFromLeft = horizontal > 0 && enemy.x <= platform.x && enemy.x + BIRD_RADIUS >= platform.x
+    const blockedFromRight = horizontal < 0 && enemy.x >= platform.x + platform.width && enemy.x - BIRD_RADIUS <= platform.x + platform.width
+    return verticalOverlap && (blockedFromLeft || blockedFromRight)
+  })
+
+  const baseFlapBias = enemy.kind === 'pterodactyl' ? -0.2 : enemy.hatchLevel > 0 ? 0 : 0.12
+  const flapBias = baseFlapBias + (enemyVariation(enemy.id, 0, 6) - 0.5) * 0.28
+  const flap = blockedByPlatform || (shouldFlap && (enemy.y > game.player.y + 6 || Math.sin(game.time * 1.7 + enemy.id * 0.8) > flapBias))
+  const baseSpeedMultiplier = enemy.kind === 'pterodactyl' ? 1.4 : 1 + enemy.hatchLevel * 0.18
+  const speedStep = Math.floor(game.time / 2)
+  const speedMultiplier = baseSpeedMultiplier * (0.78 + enemyVariation(enemy.id, speedStep, 2) * 0.44)
+  const airAcceleration = AI_AIR_ACCELERATION[behavior] * (0.75 + enemyVariation(enemy.id, speedStep, 5) * 0.5)
+  moveBird(enemy, { left: horizontal < -0.2, right: horizontal > 0.2, flap }, dt, game.platforms, speedMultiplier, platformContactRadius, AI_FLAP_IMPULSE, AI_MAX_RISE_SPEED, AI_FLAP_COOLDOWN, airAcceleration)
 }
 
 function dropEgg(game: GameState, enemy: Enemy) {
+  const inheritedVelocity = enemy.vx * 0.25
   game.eggs.push({
     id: game.nextEggId++,
     x: enemy.x,
     y: enemy.y,
-    vx: enemy.vx * 0.25,
+    vx: Math.abs(inheritedVelocity) > 1 ? inheritedVelocity : enemy.facing * 3,
     vy: -45,
     timer: EGG_HATCH_TIME,
     hatchLevel: enemy.hatchLevel,
@@ -255,11 +415,15 @@ function dropEgg(game: GameState, enemy: Enemy) {
 
 function hatchEgg(game: GameState, egg: Egg) {
   const facing: -1 | 1 = wrappedDelta(egg.x, game.player.x) < 0 ? -1 : 1
+  const mountArrivalDirection: -1 | 1 = egg.id % 2 === 0 ? 1 : -1
   game.enemies.push({
     ...makeBird(egg.x, Math.max(BIRD_RADIUS + 10, egg.y - BIRD_RADIUS), facing),
+    materializeTimer: 0,
     id: game.nextEnemyId++,
     kind: 'rider',
     hatchLevel: egg.hatchLevel + 1,
+    mountArrivalX: mountArrivalDirection > 0 ? 0 : GAME_WIDTH,
+    mountArrivalDirection,
   })
   game.message = 'EGG HATCHED  RIDER RETURNED'
   game.messageTimer = 1.1
@@ -312,6 +476,7 @@ function spawnPterodactyl(game: GameState) {
   const facing: -1 | 1 = x === 0 ? 1 : -1
   game.enemies.push({
     ...makeBird(x, Math.max(70, game.player.y - 65), facing),
+    materializeTimer: 0,
     id: game.nextEnemyId++,
     kind: 'pterodactyl',
     hatchLevel: 0,
@@ -322,10 +487,11 @@ function spawnPterodactyl(game: GameState) {
 }
 
 function checkJousts(game: GameState) {
-  if (game.player.invulnerability > 0) return
+  if (game.player.invulnerability > 0 || game.playerRespawnTimer > 0 || game.player.materializeTimer > 0) return
 
   for (let index = game.enemies.length - 1; index >= 0; index -= 1) {
     const enemy = game.enemies[index]
+    if (enemy.materializeTimer > 0) continue
     const horizontalDistance = Math.abs(wrappedDelta(game.player.x, enemy.x))
     if (horizontalDistance > BIRD_RADIUS * 1.7 || Math.abs(game.player.y - enemy.y) > BIRD_RADIUS * 1.65) continue
     if (enemy.collisionCooldown > 0) continue
@@ -339,6 +505,9 @@ function checkJousts(game: GameState) {
       game.player.score += points
       game.message = `${enemy.kind === 'pterodactyl' ? 'PTERODACTYL DOWN' : 'RIDER DOWN'}  +${points}`
       game.messageTimer = 1.05
+      if (enemy.kind !== 'pterodactyl' && enemy.mountArrivalX === undefined) {
+        addMountDeparture(game, enemy, enemy.hatchLevel > 0 ? 'hunter' : 'bounder')
+      }
       game.enemies.splice(index, 1)
       if (enemy.kind === 'rider') dropEgg(game, enemy)
       game.timeSinceKill = 0
@@ -346,7 +515,7 @@ function checkJousts(game: GameState) {
     }
 
     if (result === 'enemy') {
-      loseLife(game, 'STRIKE LOST')
+      loseLife(game, 'STRIKE LOST', true)
       if (game.mode === 'gameover') return
       break
     }
@@ -369,6 +538,7 @@ export function stepGame(game: GameState, input: InputState, dt: number) {
   if (dt <= 0) return
   game.time += dt
   game.messageTimer = Math.max(0, game.messageTimer - dt)
+  updateMountDepartures(game, dt)
 
   if (game.mode === 'title') {
     if (input.start) startGame(game)
@@ -379,7 +549,7 @@ export function stepGame(game: GameState, input: InputState, dt: number) {
     return
   }
 
-  moveBird(game.player, input, dt, game.platforms)
+  if (game.playerRespawnTimer <= 0) moveBird(game.player, input, dt, game.platforms)
   for (const enemy of game.enemies) updateEnemy(game, enemy, dt)
   game.timeSinceKill += dt
 
@@ -390,7 +560,7 @@ export function stepGame(game: GameState, input: InputState, dt: number) {
   if (game.timeSinceKill >= PTERODACTYL_DELAY) spawnPterodactyl(game)
   updateEggs(game, dt)
 
-  if ((game.player.y + BIRD_RADIUS >= LAVA_Y && isOverLava(game.player.x)) || game.player.y > GAME_HEIGHT + BIRD_RADIUS) {
+  if (game.playerRespawnTimer <= 0 && ((game.player.y + BIRD_RADIUS >= LAVA_Y && isOverLava(game.player.x)) || game.player.y > GAME_HEIGHT + BIRD_RADIUS)) {
     loseLife(game, 'FELL INTO THE LAVA')
   } else {
     checkJousts(game)
@@ -399,7 +569,25 @@ export function stepGame(game: GameState, input: InputState, dt: number) {
   if (game.mode !== 'playing') return
   if (game.enemies.length === 0 && game.eggs.length === 0) {
     game.waveDelay += dt
-    if (game.waveDelay >= 1.1) spawnWave(game)
+    const lavaCovers = game.platforms.filter((platform) => platform.burnsAway)
+    if (game.wave === 2 && lavaCovers.length > 0) {
+      const startingDissolve = lavaCovers.some((platform) => platform.dissolveTimer === undefined)
+      if (startingDissolve) {
+        for (const platform of lavaCovers) platform.dissolveTimer = LAVA_PLATFORM_DISSOLVE_DURATION
+        game.message = 'LAVA PLATFORMS CRUMBLING'
+        game.messageTimer = LAVA_PLATFORM_DISSOLVE_DURATION
+      } else {
+        for (const platform of lavaCovers) {
+          platform.dissolveTimer = Math.max(0, platform.dissolveTimer! - dt)
+        }
+        if (lavaCovers.every((platform) => platform.dissolveTimer === 0)) {
+          game.platforms = game.platforms.filter((platform) => !platform.burnsAway)
+          spawnWave(game)
+        }
+      }
+    } else if (game.waveDelay >= 1.1) {
+      spawnWave(game)
+    }
   } else {
     game.waveDelay = 0
   }
