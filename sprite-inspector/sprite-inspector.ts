@@ -6,6 +6,21 @@ if (import.meta.hot) {
 }
 
 type DocumentKey = 'atlas-joust' | 'animation-player' | 'animation-bounder' | 'animation-hunter'
+type EditorMode = 'animation' | 'atlas' | 'font'
+const PLATFORM_SPRITE_NAMES = [
+  'platformStandard',
+  'platformCover',
+  'platformAlternate',
+  'platformSpawnWide',
+  'platformSpawnNarrow',
+  'platformSpawnTall',
+  'platformNoSpawn',
+  'platformShortRight',
+  'platformShortLeft',
+  'platformLong',
+] as const
+type PlatformSpriteName = typeof PLATFORM_SPRITE_NAMES[number]
+type InspectorMount = MountClass | 'pterodactyl' | 'egg' | PlatformSpriteName
 type EditPath = string[]
 
 interface UndoEntry {
@@ -15,8 +30,8 @@ interface UndoEntry {
 }
 
 interface SaveEditorSession {
-  mode: 'animation' | 'atlas'
-  mount: MountClass
+  mode: EditorMode
+  mount: InspectorMount
   facing: Facing
   motion: 'walk' | 'fly'
   frameIndex: number
@@ -48,8 +63,15 @@ const controls = {
   viewport: document.querySelector<HTMLElement>('#canvas-viewport')!,
   animation: document.querySelector<HTMLElement>('#animation-controls')!,
   atlas: document.querySelector<HTMLElement>('#atlas-controls')!,
+  font: document.querySelector<HTMLElement>('#font-controls')!,
   mount: document.querySelector<HTMLSelectElement>('#mount-select')!,
+  motion: document.querySelector<HTMLElement>('#motion-controls')!,
+  motionLabel: document.querySelector<HTMLElement>('#motion-label')!,
+  facing: document.querySelector<HTMLElement>('#facing-controls')!,
+  facingLabel: document.querySelector<HTMLElement>('#facing-label')!,
+  compositionRow: document.querySelector<HTMLElement>('#composition-row')!,
   frameSelect: document.querySelector<HTMLSelectElement>('#atlas-frame-select')!,
+  fontGlyph: document.querySelector<HTMLSelectElement>('#font-glyph-select')!,
   frameRange: document.querySelector<HTMLInputElement>('#frame-range')!,
   frameCounter: document.querySelector<HTMLOutputElement>('#frame-counter')!,
   zoom: document.querySelector<HTMLInputElement>('#zoom-range')!,
@@ -75,7 +97,7 @@ const controls = {
   editorStatus: document.querySelector<HTMLElement>('#editor-status')!,
 }
 
-let mode: 'animation' | 'atlas' = 'animation'
+let mode: EditorMode = 'animation'
 let facing: Facing = 1
 let motion: 'walk' | 'fly' = 'walk'
 let frameIndex = 0
@@ -111,8 +133,33 @@ function resumeAfterEditDelay() {
   }, 500)
 }
 
-function selectedMount(): MountClass {
-  return controls.mount.value as MountClass
+function selectedMount(): InspectorMount {
+  return controls.mount.value as InspectorMount
+}
+
+function isPlatformSprite(mount = selectedMount()): mount is PlatformSpriteName {
+  return PLATFORM_SPRITE_NAMES.includes(mount as PlatformSpriteName)
+}
+
+function pterodactylFrames(): SpriteFrame[] {
+  return Object.keys(atlas.frames)
+    .filter((name) => name.startsWith('pterodactylFlyLeft'))
+    .sort()
+    .map((name) => atlas.frames[name])
+}
+
+const eggFrameNames = [
+  'eggStationary',
+  'eggRollingRight',
+  'eggRollingLeft',
+  'eggHatching1',
+  'eggHatching2',
+  'eggHatching3',
+]
+const eggPoseLabels = ['Stationary', 'Rolling right', 'Rolling left', 'Hatching 1', 'Hatching 2', 'Hatching 3']
+
+function eggFrames(): SpriteFrame[] {
+  return eggFrameNames.map((name) => atlas.frames[name])
 }
 
 function formatFrameName(name: string): string {
@@ -175,7 +222,9 @@ function restoreSaveEditorSession() {
 
   try {
     const state = JSON.parse(serialized) as SaveEditorSession
-    if (!['animation', 'atlas'].includes(state.mode) || !['player', 'bounder', 'hunter'].includes(state.mount)) return
+    if (!['animation', 'atlas', 'font'].includes(state.mode) || ![
+      'player', 'bounder', 'hunter', 'pterodactyl', 'egg', ...PLATFORM_SPRITE_NAMES,
+    ].includes(state.mount)) return
 
     for (const key of Object.keys(originalDocuments) as DocumentKey[]) {
       const document = state.documents[key]
@@ -187,7 +236,7 @@ function restoreSaveEditorSession() {
 
     mode = state.mode
     facing = state.facing
-    motion = state.motion
+    motion = state.mount === 'pterodactyl' ? 'fly' : state.motion
     frameIndex = state.frameIndex
     isPlaying = state.isPlaying || state.resumeAfterEdit
     controls.mount.value = state.mount
@@ -224,6 +273,9 @@ function selectedStripName() {
 }
 
 function selectedAnimationFrame(): SpriteFrame {
+  if (isPlatformSprite()) return atlas.frames[selectedMount()]
+  if (selectedMount() === 'egg') return eggFrames()[frameIndex]
+  if (selectedMount() === 'pterodactyl') return pterodactylFrames()[frameIndex]
   const animation = draftAnimations[selectedMount()]
   const strip = animation.strips[selectedStripName()]
   return {
@@ -244,26 +296,34 @@ function selectedAtlasFrame(): SpriteFrame {
   return atlas.frames[controls.frameSelect.value]
 }
 
+function selectedFontGlyph(): SpriteFrame {
+  return atlas.font!.glyphs[controls.fontGlyph.value]
+}
+
 function isEntireAtlasSelected(): boolean {
   return controls.frameSelect.value === '__atlas__'
 }
 
 function currentFrame(): SpriteFrame {
   if (mode === 'animation') return selectedAnimationFrame()
+  if (mode === 'font') return selectedFontGlyph()
   return isEntireAtlasSelected()
     ? { x: 0, y: 0, width: atlas.width, height: atlas.height }
     : selectedAtlasFrame()
 }
 
 function updateFrameControls() {
-  if (mode === 'atlas') {
+  if (mode === 'atlas' || (mode === 'animation' && isPlatformSprite())) {
     controls.frameRange.disabled = true
     controls.frameCounter.textContent = 'STATIC'
     return
   }
-  const animation = draftAnimations[selectedMount()]
-  const stripName = selectedStripName()
-  const count = animation.strips[stripName].count
+  const mount = selectedMount()
+  const count = mount === 'egg'
+    ? eggFrames().length
+    : mount === 'pterodactyl'
+      ? pterodactylFrames().length
+      : draftAnimations[mount].strips[selectedStripName()].count
   frameIndex = Math.min(frameIndex, count - 1)
   controls.frameRange.disabled = false
   controls.frameRange.max = String(count - 1)
@@ -274,8 +334,18 @@ function updateFrameControls() {
 function updateControlVisibility() {
   controls.animation.hidden = mode !== 'animation'
   controls.atlas.hidden = mode !== 'atlas'
-  controls.composition.disabled = mode !== 'animation'
-  controls.play.disabled = mode !== 'animation'
+  controls.font.hidden = mode !== 'font'
+  const mount = selectedMount()
+  const fixedAnimation = mode === 'animation' && (mount === 'pterodactyl' || mount === 'egg' || isPlatformSprite(mount))
+  const egg = mode === 'animation' && mount === 'egg'
+  const platform = mode === 'animation' && isPlatformSprite(mount)
+  controls.motion.hidden = fixedAnimation
+  controls.motionLabel.hidden = fixedAnimation
+  controls.facing.hidden = egg || platform
+  controls.facingLabel.hidden = egg || platform
+  controls.compositionRow.hidden = fixedAnimation
+  controls.composition.disabled = mode !== 'animation' || fixedAnimation
+  controls.play.disabled = mode !== 'animation' || platform
   updateFrameControls()
 }
 
@@ -293,7 +363,43 @@ function updateDetails() {
   }
   const addSummary = (label: string, value: string, summary?: string) => rows.push({ label, value, summary })
 
-  if (mode === 'animation') {
+  if (mode === 'animation' && isPlatformSprite()) {
+    const frameName = selectedMount() as PlatformSpriteName
+    const frame = selectedAnimationFrame()
+    const framePath = ['frames', frameName]
+    addSummary('Sprite', formatFrameName(frameName))
+    addSummary('Start', `(${frame.x}, ${frame.y})`, 'start')
+    addEdit('Start X', frame.x, 'atlas-joust', [...framePath, 'x'])
+    addEdit('Start Y', frame.y, 'atlas-joust', [...framePath, 'y'])
+    addSummary('Stop, exclusive', `(${frame.x + frame.width}, ${frame.y + frame.height})`, 'stop')
+    addSummary('Crop size', `${frame.width} × ${frame.height} px`, 'frame-size')
+    addEdit('Crop width', frame.width, 'atlas-joust', [...framePath, 'width'], 1)
+    addEdit('Crop height', frame.height, 'atlas-joust', [...framePath, 'height'], 1)
+    controls.sourceFile.textContent = 'atlas-joust.json'
+    controls.detailsTitle.textContent = formatFrameName(frameName)
+    controls.compositionNote.hidden = true
+  } else if (mode === 'animation' && (selectedMount() === 'pterodactyl' || selectedMount() === 'egg')) {
+    const frames = pterodactylFrames()
+    const egg = selectedMount() === 'egg'
+    const activeFrames = egg ? eggFrames() : frames
+    const frame = selectedAnimationFrame()
+    const frameName = egg ? eggFrameNames[frameIndex] : `pterodactylFlyLeft${frameIndex + 1}`
+    const framePath = ['frames', frameName]
+    addSummary(egg ? 'Sequence' : 'Animation', egg ? eggPoseLabels[frameIndex] : `Fly ${facing > 0 ? 'right' : 'left'}`)
+    addSummary('Frame', frameName)
+    addSummary('Current frame', `${frameIndex} of ${activeFrames.length - 1}`)
+    addSummary('Start', `(${frame.x}, ${frame.y})`, 'start')
+    addEdit('Start X', frame.x, 'atlas-joust', [...framePath, 'x'])
+    addEdit('Start Y', frame.y, 'atlas-joust', [...framePath, 'y'])
+    addSummary('Stop, exclusive', `(${frame.x + frame.width}, ${frame.y + frame.height})`, 'stop')
+    addSummary('Frame size', `${frame.width} × ${frame.height} px`, 'frame-size')
+    addEdit('Frame width', frame.width, 'atlas-joust', [...framePath, 'width'], 1)
+    addEdit('Frame height', frame.height, 'atlas-joust', [...framePath, 'height'], 1)
+    addSummary('Source rect', `${frame.x}, ${frame.y}, ${frame.width} × ${frame.height} px`, 'source-rect')
+    controls.sourceFile.textContent = 'atlas-joust.json'
+    controls.detailsTitle.textContent = egg ? `Egg ${eggPoseLabels[frameIndex].toLowerCase()}` : `Pterodactyl fly ${facing > 0 ? 'right' : 'left'}`
+    controls.compositionNote.hidden = true
+  } else if (mode === 'animation') {
     const mount = selectedMount()
     const animation = draftAnimations[mount]
     const stripName = selectedStripName()
@@ -320,7 +426,7 @@ function updateDetails() {
       const riderName = animation.riderFrames[direction]
       const rider = draftAtlases[animation.atlas].frames[riderName]
       const riderPath = ['frames', riderName]
-      addSummary('Rider frame', riderName)
+      addSummary('Rider frame', riderName, 'rider-frame')
       addEdit('Rider X', rider.x, 'atlas-joust', [...riderPath, 'x'])
       addEdit('Rider Y', rider.y, 'atlas-joust', [...riderPath, 'y'])
       addEdit('Rider crop width', rider.width, 'atlas-joust', [...riderPath, 'width'], 1)
@@ -335,6 +441,21 @@ function updateDetails() {
     controls.sourceFile.textContent = `animation-${mount}.json + atlas-joust.json`
     controls.detailsTitle.textContent = `${mount[0].toUpperCase()}${mount.slice(1)} ${motion} ${facing > 0 ? 'right' : 'left'}`
     controls.compositionNote.hidden = mount !== 'player'
+  } else if (mode === 'font') {
+    const character = controls.fontGlyph.value
+    const glyph = selectedFontGlyph()
+    const glyphPath = ['font', 'glyphs', character]
+    addSummary('Character', character === '000' ? '000 · single glyph' : character)
+    addSummary('Start', `(${glyph.x}, ${glyph.y})`, 'start')
+    addEdit('Start X', glyph.x, 'atlas-joust', [...glyphPath, 'x'])
+    addEdit('Start Y', glyph.y, 'atlas-joust', [...glyphPath, 'y'])
+    addSummary('Stop, exclusive', `(${glyph.x + glyph.width}, ${glyph.y + glyph.height})`, 'stop')
+    addSummary('Crop size', `${glyph.width} × ${glyph.height} px`, 'frame-size')
+    addEdit('Crop width', glyph.width, 'atlas-joust', [...glyphPath, 'width'], 1)
+    addEdit('Crop height', glyph.height, 'atlas-joust', [...glyphPath, 'height'], 1)
+    controls.sourceFile.textContent = 'atlas-joust.json'
+    controls.detailsTitle.textContent = character === '000' ? 'Glyph 000 · single character' : `Glyph ${character}`
+    controls.compositionNote.hidden = true
   } else if (isEntireAtlasSelected()) {
     const animationFrameCount = Object.values(draftAnimations).reduce((total, animation) => (
       total + Object.values(animation.strips).reduce((count, strip) => count + strip.count, 0)
@@ -362,6 +483,10 @@ function updateDetails() {
     controls.compositionNote.hidden = true
   }
 
+  controls.details.classList.toggle(
+    'rider-layout',
+    mode === 'animation' && controls.composition.checked && !['egg', 'pterodactyl'].includes(selectedMount()) && !isPlatformSprite(),
+  )
   controls.details.replaceChildren(...rows.flatMap((row) => {
     const term = document.createElement('dt')
     const description = document.createElement('dd')
@@ -450,14 +575,30 @@ function updateDetails() {
 
 function updateMappingSummaries() {
   const values: Record<string, string> = {}
-  if (mode === 'animation') {
-    const animation = draftAnimations[selectedMount()]
+  if (mode === 'animation' && isPlatformSprite()) {
+    const frame = selectedAnimationFrame()
+    values.start = `(${frame.x}, ${frame.y})`
+    values.stop = `(${frame.x + frame.width}, ${frame.y + frame.height})`
+    values['frame-size'] = `${frame.width} × ${frame.height} px`
+  } else if (mode === 'animation' && (selectedMount() === 'pterodactyl' || selectedMount() === 'egg')) {
+    const frame = selectedAnimationFrame()
+    values.start = `(${frame.x}, ${frame.y})`
+    values.stop = `(${frame.x + frame.width}, ${frame.y + frame.height})`
+    values['frame-size'] = `${frame.width} × ${frame.height} px`
+    values['source-rect'] = `${frame.x}, ${frame.y}, ${frame.width} × ${frame.height} px`
+  } else if (mode === 'animation') {
+    const animation = draftAnimations[selectedMount() as MountClass]
     const strip = animation.strips[selectedStripName()]
     const frame = selectedAnimationFrame()
     values.start = `(${strip.x}, ${strip.y})`
     values.stop = `(${strip.x + strip.frameWidth * strip.count}, ${strip.y + strip.frameHeight})`
     values['frame-size'] = `${strip.frameWidth} × ${strip.frameHeight} px`
     values['source-rect'] = `${frame.x}, ${frame.y}, ${frame.width} × ${frame.height} px`
+  } else if (mode === 'font') {
+    const glyph = selectedFontGlyph()
+    values.start = `(${glyph.x}, ${glyph.y})`
+    values.stop = `(${glyph.x + glyph.width}, ${glyph.y + glyph.height})`
+    values['frame-size'] = `${glyph.width} × ${glyph.height} px`
   } else if (!isEntireAtlasSelected()) {
     const frame = selectedAtlasFrame()
     values.start = `(${frame.x}, ${frame.y})`
@@ -518,12 +659,18 @@ async function saveEditedDocuments() {
   window.setTimeout(() => sessionStorage.removeItem(SAVE_EDITOR_SESSION_KEY), 5000)
 }
 
-function drawCrop(frame: SpriteFrame, x: number, y: number, width: number, height: number) {
+function drawCrop(frame: SpriteFrame, x: number, y: number, width: number, height: number, mirror = false) {
   if (!image) return
   context.save()
   context.globalCompositeOperation = 'screen'
   context.imageSmoothingEnabled = false
-  context.drawImage(image, frame.x, frame.y, frame.width, frame.height, x, y, width, height)
+  if (mirror) {
+    context.translate(x + width, y)
+    context.scale(-1, 1)
+    context.drawImage(image, frame.x, frame.y, frame.width, frame.height, 0, 0, width, height)
+  } else {
+    context.drawImage(image, frame.x, frame.y, frame.width, frame.height, x, y, width, height)
+  }
   context.restore()
 }
 
@@ -584,8 +731,8 @@ function drawPreview() {
   if (!image) return
   const scale = Number(controls.zoom.value)
   const mount = selectedMount()
-  const animation = draftAnimations[mount]
-  const showComposition = mode === 'animation' && controls.composition.checked
+  const animation = draftAnimations[mount === 'pterodactyl' || mount === 'egg' || isPlatformSprite(mount) ? 'player' : mount]
+  const showComposition = mode === 'animation' && mount !== 'pterodactyl' && mount !== 'egg' && !isPlatformSprite(mount) && controls.composition.checked
   const compositionDirection = facing < 0 ? 'left' : 'right'
   const compositionOffsetX = animation.riderOffset[compositionDirection]
   const width = mode === 'animation' && showComposition
@@ -623,7 +770,7 @@ function drawPreview() {
     const frame = currentFrame()
     const drawnWidth = frame.width * scale
     const drawnHeight = frame.height * scale
-    drawCrop(frame, centerX - drawnWidth / 2, centerY - drawnHeight / 2, drawnWidth, drawnHeight)
+    drawCrop(frame, centerX - drawnWidth / 2, centerY - drawnHeight / 2, drawnWidth, drawnHeight, mode === 'animation' && mount === 'pterodactyl' && facing > 0)
     if (mode === 'atlas' && isEntireAtlasSelected()) {
       drawAtlasBounds(scale, centerX - drawnWidth / 2, centerY - drawnHeight / 2)
     } else {
@@ -648,17 +795,37 @@ function render(refreshDetails = true) {
   updateStepperStates()
   drawPreview()
   controls.title.textContent = mode === 'animation'
-    ? `${selectedMount()[0].toUpperCase()}${selectedMount().slice(1)} ${motion}`
-    : isEntireAtlasSelected() ? 'Entire atlas' : 'Atlas crop'
+    ? isPlatformSprite()
+      ? formatFrameName(selectedMount())
+      : selectedMount() === 'egg'
+      ? `Egg ${eggPoseLabels[frameIndex].toLowerCase()}`
+      : selectedMount() === 'pterodactyl' ? 'Pterodactyl fly' : `${selectedMount()[0].toUpperCase()}${selectedMount().slice(1)} ${motion}`
+    : mode === 'font'
+      ? controls.fontGlyph.value === '000' ? 'Glyph 000' : `Glyph ${controls.fontGlyph.value}`
+      : isEntireAtlasSelected() ? 'Entire atlas' : 'Atlas crop'
   controls.kicker.textContent = mode === 'animation'
-    ? `${selectedMount().toUpperCase()} / ${motion.toUpperCase()} / ${facing > 0 ? 'RIGHT' : 'LEFT'}`
-    : isEntireAtlasSelected() ? 'JOUST / FULL ATLAS MAP' : 'JOUST / NAMED ATLAS FRAME'
+    ? isPlatformSprite()
+      ? `PLATFORM / ${selectedMount().replace('platform', '').toUpperCase()}`
+      : selectedMount() === 'egg'
+      ? `EGG / ${eggPoseLabels[frameIndex].toUpperCase()}`
+      : selectedMount() === 'pterodactyl'
+        ? `PTERODACTYL / FLY / ${facing > 0 ? 'RIGHT' : 'LEFT'}`
+        : `${selectedMount().toUpperCase()} / ${motion.toUpperCase()} / ${facing > 0 ? 'RIGHT' : 'LEFT'}`
+    : mode === 'font'
+      ? `FONT / PIXEL MAP / ${controls.fontGlyph.value}`
+      : isEntireAtlasSelected() ? 'JOUST / FULL ATLAS MAP' : 'JOUST / NAMED ATLAS FRAME'
   controls.kind.textContent = mode.toUpperCase()
-  controls.previewNote.textContent = mode === 'atlas' && isEntireAtlasSelected()
-    ? 'Mapped crops outlined by atlas and mount class'
-    : mode === 'animation' && controls.composition.checked && selectedMount() !== 'player'
-      ? 'Game composition · nearest-neighbor scaling'
-      : 'Source pixels enlarged with nearest-neighbor scaling'
+  controls.previewNote.textContent = mode === 'font'
+    ? 'Glyph crop · nearest-neighbor scaling · pixel grid'
+    : mode === 'atlas' && isEntireAtlasSelected()
+      ? 'Mapped crops outlined by atlas and mount class'
+      : mode === 'animation' && isPlatformSprite()
+        ? 'Platform crop · nearest-neighbor scaling'
+        : mode === 'animation' && selectedMount() === 'egg'
+          ? 'Egg sequence · nearest-neighbor scaling'
+          : mode === 'animation' && selectedMount() !== 'pterodactyl' && controls.composition.checked && selectedMount() !== 'player'
+            ? 'Game composition · nearest-neighbor scaling'
+            : 'Source pixels enlarged with nearest-neighbor scaling'
 }
 
 function setImage(source: string, label: string) {
@@ -681,18 +848,24 @@ function setImage(source: string, label: string) {
 }
 
 function changeFrame(step: number) {
-  if (mode !== 'animation') return
-  const count = draftAnimations[selectedMount()].strips[selectedStripName()].count
+  if (mode !== 'animation' || isPlatformSprite()) return
+  const mount = selectedMount()
+  const count = mount === 'egg'
+    ? eggFrames().length
+    : mount === 'pterodactyl'
+      ? pterodactylFrames().length
+      : draftAnimations[mount].strips[selectedStripName()].count
   frameIndex = (frameIndex + step + count) % count
   render()
 }
 
 for (const button of document.querySelectorAll<HTMLButtonElement>('[data-mode]')) {
   button.addEventListener('click', () => {
-    mode = button.dataset.mode as 'animation' | 'atlas'
-    controls.zoom.value = mode === 'atlas' ? '1' : '6'
+    mode = button.dataset.mode as EditorMode
+    controls.zoom.value = mode === 'atlas' ? '1' : mode === 'font' ? '12' : '6'
     controls.zoomValue.textContent = `${controls.zoom.value}×`
     if (mode === 'atlas') controls.frameSelect.value = '__atlas__'
+    if (mode === 'font') controls.grid.checked = true
     for (const tab of document.querySelectorAll<HTMLButtonElement>('[data-mode]')) {
       tab.setAttribute('aria-selected', String(tab === button))
     }
@@ -727,14 +900,27 @@ entireAtlasOption.value = '__atlas__'
 entireAtlasOption.textContent = 'Entire atlas'
 controls.frameSelect.append(entireAtlasOption)
 for (const name of Object.keys(atlas.frames)) {
+  if (name.startsWith('glyph_')) continue
   const option = document.createElement('option')
   option.value = name
   option.textContent = formatFrameName(name)
   controls.frameSelect.append(option)
 }
+for (const character of Object.keys(atlas.font?.glyphs ?? {})) {
+  const option = document.createElement('option')
+  option.value = character
+  option.textContent = character === '000' ? '000 · single glyph' : character === ' ' ? 'Space' : character
+  controls.fontGlyph.append(option)
+}
 
 controls.mount.addEventListener('change', () => {
   frameIndex = 0
+  if (selectedMount() === 'pterodactyl') {
+    motion = 'fly'
+    for (const button of document.querySelectorAll<HTMLButtonElement>('[data-motion]')) {
+      button.setAttribute('aria-pressed', String(button.dataset.motion === motion))
+    }
+  }
   render()
 })
 controls.frameSelect.addEventListener('change', () => {
@@ -742,6 +928,7 @@ controls.frameSelect.addEventListener('change', () => {
   controls.zoomValue.textContent = `${controls.zoom.value}×`
   render()
 })
+controls.fontGlyph.addEventListener('change', render)
 controls.frameRange.addEventListener('input', () => {
   frameIndex = Number(controls.frameRange.value)
   render()
