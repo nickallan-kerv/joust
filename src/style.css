@@ -1,9 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
-
 :root {
   color: #f1f0d9;
   background: #0b2b25;
-  font-family: 'DM Mono', Consolas, monospace;
+  font-family: Consolas, monospace;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
