@@ -3,31 +3,31 @@
   "atlas": "joust",
   "strips": {
     "walkRight": {
-      "x": 384,
-      "y": 117,
-      "frameWidth": 42,
-      "frameHeight": 40,
+      "x": 382,
+      "y": 160,
+      "frameWidth": 45,
+      "frameHeight": 35,
       "count": 5
     },
     "flyRight": {
       "x": 0,
-      "y": 167,
+      "y": 217,
       "frameWidth": 42,
-      "frameHeight": 40,
+      "frameHeight": 32,
       "count": 2
     },
     "walkLeft": {
       "x": 86,
-      "y": 167,
-      "frameWidth": 40,
-      "frameHeight": 40,
+      "y": 213,
+      "frameWidth": 44,
+      "frameHeight": 32,
       "count": 5
     },
     "flyLeft": {
-      "x": 294,
-      "y": 167,
+      "x": 310,
+      "y": 210,
       "frameWidth": 42,
-      "frameHeight": 40,
+      "frameHeight": 32,
       "count": 2
     }
   },
@@ -38,8 +38,8 @@
   },
   "riderFacing": "native",
   "riderOffset": {
-    "left": -7,
-    "right": 12
+    "left": -10,
+    "right": 15
   },
   "composition": {
     "mountSize": {
@@ -47,7 +47,7 @@
       "height": 56
     },
     "riderSize": {
-      "width": 38,
+      "width": 30,
       "height": 22
     },
     "riderYOffset": -17
