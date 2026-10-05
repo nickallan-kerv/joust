@@ -25,6 +25,17 @@ export interface SpriteAtlasDefinition {
   height: number
   blendMode: 'screen' | 'source-over'
   frames: Record<string, SpriteFrame>
+  font?: {
+    rows: Array<{
+      characters: string[]
+      x: number
+      y: number
+      advance: number
+      width: number
+      height: number
+    }>
+    glyphs: Record<string, SpriteFrame>
+  }
 }
 
 export interface SpriteAnimationDefinition {
@@ -109,7 +120,48 @@ export function validateSpriteDefinitions(
         throw new Error(`Frame "${frameName}" exceeds atlas "${atlas.id}" bounds.`)
       }
     }
-    atlases[atlas.id] = atlas as unknown as SpriteAtlasDefinition
+    let font: SpriteAtlasDefinition['font']
+    if (atlas.font !== undefined) {
+      const fontDefinition = asRecord(atlas.font, `Atlas "${atlas.id}" font`)
+      if (!Array.isArray(fontDefinition.rows)) throw new Error(`Atlas "${atlas.id}" font rows must be an array.`)
+      const glyphs: Record<string, SpriteFrame> = {}
+      for (const [rowIndex, rowValue] of fontDefinition.rows.entries()) {
+        const row = asRecord(rowValue, `Atlas "${atlas.id}" font row ${rowIndex}`)
+        if (!Array.isArray(row.characters) || row.characters.some((character) => typeof character !== 'string' || character.length === 0)) {
+          throw new Error(`Atlas "${atlas.id}" font row ${rowIndex} characters must be non-empty strings.`)
+        }
+        const x = requireInteger(row.x, `Atlas "${atlas.id}" font row ${rowIndex} x`)
+        const y = requireInteger(row.y, `Atlas "${atlas.id}" font row ${rowIndex} y`)
+        const advance = requireInteger(row.advance, `Atlas "${atlas.id}" font row ${rowIndex} advance`, 1)
+        const glyphWidth = requireInteger(row.width, `Atlas "${atlas.id}" font row ${rowIndex} width`, 1)
+        const glyphHeight = requireInteger(row.height, `Atlas "${atlas.id}" font row ${rowIndex} height`, 1)
+        const characters = row.characters as string[]
+        if (characters.length > 0 && (x + (characters.length - 1) * advance + glyphWidth > width || y + glyphHeight > height)) {
+          throw new Error(`Atlas "${atlas.id}" font row ${rowIndex} exceeds atlas bounds.`)
+        }
+        characters.forEach((character, index) => {
+          if (!glyphs[character]) {
+            glyphs[character] = { x: x + index * advance, y, width: glyphWidth, height: glyphHeight }
+          }
+        })
+      }
+      if (fontDefinition.glyphs !== undefined) {
+        const overrides = asRecord(fontDefinition.glyphs, `Atlas "${atlas.id}" font glyphs`)
+        for (const [character, glyphValue] of Object.entries(overrides)) {
+          const glyph = asRecord(glyphValue, `Atlas "${atlas.id}" font glyph "${character}"`)
+          const x = requireInteger(glyph.x, `Font glyph "${character}" x`)
+          const y = requireInteger(glyph.y, `Font glyph "${character}" y`)
+          const glyphWidth = requireInteger(glyph.width, `Font glyph "${character}" width`, 1)
+          const glyphHeight = requireInteger(glyph.height, `Font glyph "${character}" height`, 1)
+          if (x + glyphWidth > width || y + glyphHeight > height) {
+            throw new Error(`Font glyph "${character}" exceeds atlas "${atlas.id}" bounds.`)
+          }
+          glyphs[character] = { x, y, width: glyphWidth, height: glyphHeight }
+        }
+      }
+      font = { rows: fontDefinition.rows as SpriteAtlasDefinition['font'] extends infer T ? T extends { rows: infer R } ? R : never : never, glyphs }
+    }
+    atlases[atlas.id] = { ...atlas, ...(font ? { font } : {}) } as unknown as SpriteAtlasDefinition
   }
 
   const animations: Partial<Record<MountClass, SpriteAnimationDefinition>> = {}
