@@ -10,6 +10,7 @@ export interface Bird {
   collisionCooldown: number
   reboundTimer: number
   invulnerability: number
+  materializeTimer: number
 }
 
 export interface Player extends Bird {
@@ -21,6 +22,11 @@ export interface Enemy extends Bird {
   id: number
   kind: 'rider' | 'pterodactyl'
   hatchLevel: number
+  flightDirection?: -1 | 1
+  flightTimer?: number
+  flightDecision?: number
+  mountArrivalX?: number
+  mountArrivalDirection?: -1 | 1
 }
 
 export interface Egg {
@@ -33,12 +39,35 @@ export interface Egg {
   hatchLevel: number
 }
 
+export interface MountDeparture {
+  x: number
+  y: number
+  facing: -1 | 1
+  mountClass: 'player' | 'bounder' | 'hunter' | 'pterodactyl'
+  age: number
+}
+
+export type PlatformSpriteName =
+  | 'platformStandard'
+  | 'platformCover'
+  | 'platformAlternate'
+  | 'platformSpawnWide'
+  | 'platformSpawnNarrow'
+  | 'platformSpawnTall'
+  | 'platformNoSpawn'
+  | 'platformShortRight'
+  | 'platformShortLeft'
+  | 'platformLong'
+
 export interface Platform {
   x: number
   y: number
   width: number
   height: number
   burnsAway?: boolean
+  sprite?: PlatformSpriteName
+  spawnMarkerArt?: boolean
+  dissolveTimer?: number
 }
 
 export interface GameState {
@@ -49,6 +78,8 @@ export interface GameState {
   player: Player
   enemies: Enemy[]
   eggs: Egg[]
+  mountDepartures: MountDeparture[]
+  playerRespawnTimer: number
   platforms: Platform[]
   message: string
   messageTimer: number
