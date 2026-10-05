@@ -28,31 +28,46 @@
             <div class="segmented" role="tablist" aria-label="Sprite view">
               <button type="button" role="tab" aria-selected="true" data-mode="animation">Animation</button>
               <button type="button" role="tab" aria-selected="false" data-mode="atlas">Atlas</button>
+              <button type="button" role="tab" aria-selected="false" data-mode="font">Font</button>
             </div>
           </section>
 
           <section id="animation-controls" class="control-group">
             <h2>Animation</h2>
-            <label for="mount-select">Mount</label>
+            <label for="mount-select">Sprite</label>
             <select id="mount-select">
               <option value="player">Player</option>
               <option value="bounder">Bounder</option>
               <option value="hunter">Hunter</option>
+              <option value="pterodactyl">Pterodactyl</option>
+              <option value="egg">Egg</option>
+              <optgroup label="Platforms">
+                <option value="platformStandard">Platform Standard</option>
+                <option value="platformCover">Platform Cover</option>
+                <option value="platformAlternate">Platform Alternate</option>
+                <option value="platformSpawnWide">Platform Spawn Wide</option>
+                <option value="platformSpawnNarrow">Platform Spawn Narrow</option>
+                <option value="platformSpawnTall">Platform Spawn Tall</option>
+                <option value="platformNoSpawn">Platform No Spawn</option>
+                <option value="platformShortRight">Platform Short Right</option>
+                <option value="platformShortLeft">Platform Short Left</option>
+                <option value="platformLong">Platform Long</option>
+              </optgroup>
             </select>
 
-            <label>Motion</label>
-            <div class="segmented" role="group" aria-label="Motion state">
+            <label id="motion-label">Motion</label>
+            <div id="motion-controls" class="segmented" role="group" aria-label="Motion state">
               <button type="button" aria-pressed="true" data-motion="walk">Walk</button>
               <button type="button" aria-pressed="false" data-motion="fly">Fly</button>
             </div>
 
-            <label>Facing</label>
-            <div class="segmented compact" role="group" aria-label="Facing direction">
+            <label id="facing-label">Facing</label>
+            <div id="facing-controls" class="segmented compact" role="group" aria-label="Facing direction">
               <button type="button" aria-pressed="false" data-facing="-1">← Left</button>
               <button type="button" aria-pressed="true" data-facing="1">Right →</button>
             </div>
 
-            <label class="check-row" for="composition-toggle">
+            <label id="composition-row" class="check-row" for="composition-toggle">
               <input id="composition-toggle" type="checkbox" checked />
               <span>Show rider composition</span>
             </label>
@@ -62,6 +77,12 @@
             <h2>Atlas crop</h2>
             <label for="atlas-frame-select">Atlas view</label>
             <select id="atlas-frame-select" aria-label="Atlas view"></select>
+          </section>
+
+          <section id="font-controls" class="control-group" hidden>
+            <h2>Bitmap font</h2>
+            <label for="font-glyph-select">Character</label>
+            <select id="font-glyph-select" aria-label="Font character"></select>
           </section>
 
           <section class="control-group">
