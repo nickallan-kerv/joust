@@ -24,7 +24,7 @@
       "count": 5
     },
     "flyLeft": {
-      "x": 294,
+      "x": 298,
       "y": 117,
       "frameWidth": 42,
       "frameHeight": 40,
@@ -38,7 +38,7 @@
   },
   "riderFacing": "native",
   "riderOffset": {
-    "left": 0,
+    "left": -7,
     "right": 5
   },
   "composition": {
@@ -47,9 +47,9 @@
       "height": 56
     },
     "riderSize": {
-      "width": 38,
-      "height": 42
+      "width": 30,
+      "height": 20
     },
-    "riderYOffset": -15
+    "riderYOffset": -18
   }
 }
