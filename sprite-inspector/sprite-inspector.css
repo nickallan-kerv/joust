@@ -18,6 +18,8 @@
 
 * { box-sizing: border-box; }
 
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   min-width: 320px;
@@ -179,6 +181,8 @@ button:disabled { cursor: not-allowed; opacity: 0.42; }
 .mapping-details { display: grid; grid-template-columns: minmax(84px, 0.8fr) minmax(94px, 1.2fr); align-items: center; gap: 5px 8px; margin: 8px 0 0; font-size: 9px; }
 .mapping-details dt { color: var(--muted); font-size: 11px; line-height: 1.25; }
 .mapping-details dd { min-width: 0; margin: 0; color: var(--ink); text-align: right; }
+.mapping-details [data-summary='source-rect'] { grid-column: 2 / -1; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mapping-details.rider-layout [data-summary='rider-frame'] { grid-column: 2 / -1; }
 .number-editor { display: grid; grid-template-columns: 22px minmax(0, 1fr) 22px; align-items: stretch; gap: 2px; }
 .mapping-input { width: 100%; min-width: 0; height: 26px; padding: 2px 5px; border: 1px solid var(--line); border-radius: 2px; outline-color: var(--signal); background: var(--surface-deep); color: var(--ink); font-size: 10px; text-align: center; appearance: textfield; }
 .mapping-input::-webkit-inner-spin-button,
