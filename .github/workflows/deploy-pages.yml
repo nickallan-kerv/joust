@@ -31,6 +31,10 @@ jobs:
         run: npm install
       - name: Build site
         run: npm run build
+      - name: Verify public artifact
+        run: |
+          test -f dist/index.html
+          test ! -e dist/sprite-inspector/index.html
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload site artifact
