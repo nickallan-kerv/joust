@@ -20,7 +20,7 @@ const PLATFORM_SPRITE_NAMES = [
   'platformLong',
 ] as const
 type PlatformSpriteName = typeof PLATFORM_SPRITE_NAMES[number]
-type InspectorMount = MountClass | 'pterodactyl' | 'egg' | PlatformSpriteName
+type InspectorMount = MountClass | 'pterodactyl' | 'egg' | 'lavaTroll' | 'fire' | PlatformSpriteName
 type EditPath = string[]
 
 interface UndoEntry {
@@ -40,6 +40,8 @@ interface SaveEditorSession {
   zoom: number
   grid: boolean
   composition: boolean
+  captureMount?: MountClass
+  captureOverlay?: boolean
   atlasFrame: string
   documents: Partial<Record<DocumentKey, unknown>>
 }
@@ -70,6 +72,9 @@ const controls = {
   facing: document.querySelector<HTMLElement>('#facing-controls')!,
   facingLabel: document.querySelector<HTMLElement>('#facing-label')!,
   compositionRow: document.querySelector<HTMLElement>('#composition-row')!,
+  captureControls: document.querySelector<HTMLElement>('#capture-controls')!,
+  captureMount: document.querySelector<HTMLSelectElement>('#capture-mount-select')!,
+  captureOverlay: document.querySelector<HTMLInputElement>('#capture-overlay-toggle')!,
   frameSelect: document.querySelector<HTMLSelectElement>('#atlas-frame-select')!,
   fontGlyph: document.querySelector<HTMLSelectElement>('#font-glyph-select')!,
   frameRange: document.querySelector<HTMLInputElement>('#frame-range')!,
@@ -157,6 +162,19 @@ const eggFrameNames = [
   'eggHatching3',
 ]
 const eggPoseLabels = ['Stationary', 'Rolling right', 'Rolling left', 'Hatching 1', 'Hatching 2', 'Hatching 3']
+const fixedFrameSequences = {
+  lavaTroll: ['lavaTroll1', 'lavaTroll2', 'lavaTroll3', 'lavaTroll4', 'lavaTroll5', 'lavaTroll6'],
+  fire: ['animatedFire1', 'animatedFire2', 'animatedFire3', 'animatedFire4', 'animatedFire5', 'animatedFire6', 'animatedFire7'],
+} as const
+
+function isFixedFrameSequence(mount = selectedMount()): mount is keyof typeof fixedFrameSequences {
+  return mount === 'lavaTroll' || mount === 'fire'
+}
+
+function fixedSequenceFrames(mount = selectedMount()): SpriteFrame[] {
+  if (!isFixedFrameSequence(mount)) return []
+  return fixedFrameSequences[mount].map((name) => atlas.frames[name])
+}
 
 function eggFrames(): SpriteFrame[] {
   return eggFrameNames.map((name) => atlas.frames[name])
@@ -210,6 +228,8 @@ function captureSaveEditorSession(): SaveEditorSession {
     zoom: Number(controls.zoom.value),
     grid: controls.grid.checked,
     composition: controls.composition.checked,
+    captureMount: controls.captureMount.value as MountClass,
+    captureOverlay: controls.captureOverlay.checked,
     atlasFrame: controls.frameSelect.value,
     documents: Object.fromEntries([...modifiedDocuments].map((key) => [key, structuredClone(getDocument(key))])),
   }
@@ -223,7 +243,7 @@ function restoreSaveEditorSession() {
   try {
     const state = JSON.parse(serialized) as SaveEditorSession
     if (!['animation', 'atlas', 'font'].includes(state.mode) || ![
-      'player', 'bounder', 'hunter', 'pterodactyl', 'egg', ...PLATFORM_SPRITE_NAMES,
+      'player', 'bounder', 'hunter', 'pterodactyl', 'egg', 'lavaTroll', 'fire', ...PLATFORM_SPRITE_NAMES,
     ].includes(state.mount)) return
 
     for (const key of Object.keys(originalDocuments) as DocumentKey[]) {
@@ -244,6 +264,10 @@ function restoreSaveEditorSession() {
     controls.zoomValue.textContent = `${state.zoom}×`
     controls.grid.checked = state.grid
     controls.composition.checked = state.composition
+    if (state.captureMount && ['player', 'bounder', 'hunter'].includes(state.captureMount)) {
+      controls.captureMount.value = state.captureMount
+    }
+    if (typeof state.captureOverlay === 'boolean') controls.captureOverlay.checked = state.captureOverlay
     if (state.atlasFrame && [...controls.frameSelect.options].some((option) => option.value === state.atlasFrame)) {
       controls.frameSelect.value = state.atlasFrame
     }
@@ -276,6 +300,7 @@ function selectedAnimationFrame(): SpriteFrame {
   if (isPlatformSprite()) return atlas.frames[selectedMount()]
   if (selectedMount() === 'egg') return eggFrames()[frameIndex]
   if (selectedMount() === 'pterodactyl') return pterodactylFrames()[frameIndex]
+  if (isFixedFrameSequence()) return fixedSequenceFrames()[frameIndex]
   const animation = draftAnimations[selectedMount()]
   const strip = animation.strips[selectedStripName()]
   return {
@@ -290,6 +315,28 @@ function selectedRiderFrame(): SpriteFrame {
   const animation = draftAnimations[selectedMount()]
   const direction = facing < 0 ? 'left' : 'right'
   return draftAtlases[animation.atlas].frames[animation.riderFrames[direction]]
+}
+
+function selectedCaptureMount(): MountClass {
+  return controls.captureMount.value as MountClass
+}
+
+function selectedCaptureMountFrame(): SpriteFrame {
+  const animation = draftAnimations[selectedCaptureMount()]
+  const stripName = `fly${facing > 0 ? 'Right' : 'Left'}` as keyof typeof animation.strips
+  const strip = animation.strips[stripName]
+  const frameIndex = Math.floor((strip.count - 1) / 2)
+  return {
+    x: strip.x + frameIndex * strip.frameWidth,
+    y: strip.y,
+    width: strip.frameWidth,
+    height: strip.frameHeight,
+  }
+}
+
+function selectedCaptureRiderFrame(): SpriteFrame {
+  const animation = draftAnimations[selectedCaptureMount()]
+  return draftAtlases[animation.atlas].frames[animation.riderFrames[facing < 0 ? 'left' : 'right']]
 }
 
 function selectedAtlasFrame(): SpriteFrame {
@@ -323,6 +370,8 @@ function updateFrameControls() {
     ? eggFrames().length
     : mount === 'pterodactyl'
       ? pterodactylFrames().length
+      : isFixedFrameSequence(mount)
+        ? fixedSequenceFrames(mount).length
       : draftAnimations[mount].strips[selectedStripName()].count
   frameIndex = Math.min(frameIndex, count - 1)
   controls.frameRange.disabled = false
@@ -336,15 +385,18 @@ function updateControlVisibility() {
   controls.atlas.hidden = mode !== 'atlas'
   controls.font.hidden = mode !== 'font'
   const mount = selectedMount()
-  const fixedAnimation = mode === 'animation' && (mount === 'pterodactyl' || mount === 'egg' || isPlatformSprite(mount))
+  const fixedAnimation = mode === 'animation' && (mount === 'pterodactyl' || mount === 'egg' || isFixedFrameSequence(mount) || isPlatformSprite(mount))
   const egg = mode === 'animation' && mount === 'egg'
   const platform = mode === 'animation' && isPlatformSprite(mount)
+  const lavaTroll = mode === 'animation' && mount === 'lavaTroll'
+  controls.animation.classList.toggle('capture-active', lavaTroll)
   controls.motion.hidden = fixedAnimation
   controls.motionLabel.hidden = fixedAnimation
-  controls.facing.hidden = egg || platform
-  controls.facingLabel.hidden = egg || platform
+  controls.facing.hidden = egg || platform || (isFixedFrameSequence(mount) && !lavaTroll)
+  controls.facingLabel.hidden = egg || platform || (isFixedFrameSequence(mount) && !lavaTroll)
   controls.compositionRow.hidden = fixedAnimation
   controls.composition.disabled = mode !== 'animation' || fixedAnimation
+  controls.captureControls.hidden = !lavaTroll
   controls.play.disabled = mode !== 'animation' || platform
   updateFrameControls()
 }
@@ -378,14 +430,19 @@ function updateDetails() {
     controls.sourceFile.textContent = 'atlas-joust.json'
     controls.detailsTitle.textContent = formatFrameName(frameName)
     controls.compositionNote.hidden = true
-  } else if (mode === 'animation' && (selectedMount() === 'pterodactyl' || selectedMount() === 'egg')) {
-    const frames = pterodactylFrames()
+  } else if (mode === 'animation' && (selectedMount() === 'pterodactyl' || selectedMount() === 'egg' || isFixedFrameSequence())) {
     const egg = selectedMount() === 'egg'
-    const activeFrames = egg ? eggFrames() : frames
+    const pterodactyl = selectedMount() === 'pterodactyl'
+    const activeFrames = egg ? eggFrames() : pterodactyl ? pterodactylFrames() : fixedSequenceFrames()
     const frame = selectedAnimationFrame()
-    const frameName = egg ? eggFrameNames[frameIndex] : `pterodactylFlyLeft${frameIndex + 1}`
+    const frameName = egg
+      ? eggFrameNames[frameIndex]
+      : pterodactyl
+        ? `pterodactylFlyLeft${frameIndex + 1}`
+        : fixedFrameSequences[selectedMount() as keyof typeof fixedFrameSequences][frameIndex]
     const framePath = ['frames', frameName]
-    addSummary(egg ? 'Sequence' : 'Animation', egg ? eggPoseLabels[frameIndex] : `Fly ${facing > 0 ? 'right' : 'left'}`)
+    const sequenceLabel = selectedMount() === 'lavaTroll' ? 'Lava Troll' : 'Animated Fire'
+    addSummary(egg ? 'Sequence' : 'Animation', egg ? eggPoseLabels[frameIndex] : pterodactyl ? `Fly ${facing > 0 ? 'right' : 'left'}` : `${sequenceLabel} ${frameIndex + 1}`)
     addSummary('Frame', frameName)
     addSummary('Current frame', `${frameIndex} of ${activeFrames.length - 1}`)
     addSummary('Start', `(${frame.x}, ${frame.y})`, 'start')
@@ -397,7 +454,17 @@ function updateDetails() {
     addEdit('Frame height', frame.height, 'atlas-joust', [...framePath, 'height'], 1)
     addSummary('Source rect', `${frame.x}, ${frame.y}, ${frame.width} × ${frame.height} px`, 'source-rect')
     controls.sourceFile.textContent = 'atlas-joust.json'
-    controls.detailsTitle.textContent = egg ? `Egg ${eggPoseLabels[frameIndex].toLowerCase()}` : `Pterodactyl fly ${facing > 0 ? 'right' : 'left'}`
+    controls.detailsTitle.textContent = egg
+      ? `Egg ${eggPoseLabels[frameIndex].toLowerCase()}`
+      : pterodactyl
+        ? `Pterodactyl fly ${facing > 0 ? 'right' : 'left'}`
+        : `${sequenceLabel} ${frameIndex + 1}`
+    if (selectedMount() === 'lavaTroll') {
+      const offset = atlas.lavaTrollOverlayOffset!
+      addSummary('Captured mount', selectedCaptureMount()[0].toUpperCase() + selectedCaptureMount().slice(1))
+      addEdit('Capture offset X', offset.x, 'atlas-joust', ['lavaTrollOverlayOffset', 'x'], -256, 256)
+      addEdit('Capture offset Y', offset.y, 'atlas-joust', ['lavaTrollOverlayOffset', 'y'], -256, 256)
+    }
     controls.compositionNote.hidden = true
   } else if (mode === 'animation') {
     const mount = selectedMount()
@@ -485,7 +552,7 @@ function updateDetails() {
 
   controls.details.classList.toggle(
     'rider-layout',
-    mode === 'animation' && controls.composition.checked && !['egg', 'pterodactyl'].includes(selectedMount()) && !isPlatformSprite(),
+    mode === 'animation' && controls.composition.checked && !['egg', 'pterodactyl'].includes(selectedMount()) && !isFixedFrameSequence() && !isPlatformSprite(),
   )
   controls.details.replaceChildren(...rows.flatMap((row) => {
     const term = document.createElement('dt')
@@ -580,7 +647,7 @@ function updateMappingSummaries() {
     values.start = `(${frame.x}, ${frame.y})`
     values.stop = `(${frame.x + frame.width}, ${frame.y + frame.height})`
     values['frame-size'] = `${frame.width} × ${frame.height} px`
-  } else if (mode === 'animation' && (selectedMount() === 'pterodactyl' || selectedMount() === 'egg')) {
+  } else if (mode === 'animation' && (selectedMount() === 'pterodactyl' || selectedMount() === 'egg' || isFixedFrameSequence())) {
     const frame = selectedAnimationFrame()
     values.start = `(${frame.x}, ${frame.y})`
     values.stop = `(${frame.x + frame.width}, ${frame.y + frame.height})`
@@ -727,35 +794,73 @@ function drawAtlasBounds(scale: number, insetX: number, insetY: number) {
   context.restore()
 }
 
+function sizeCanvasToArtwork(width: number, height: number) {
+  const requiredWidth = Math.max(1, Math.ceil(width))
+  const requiredHeight = Math.max(1, Math.ceil(height))
+  if (canvas.width !== requiredWidth) canvas.width = requiredWidth
+  if (canvas.height !== requiredHeight) canvas.height = requiredHeight
+}
+
 function drawPreview() {
   if (!image) return
   const scale = Number(controls.zoom.value)
   const mount = selectedMount()
-  const animation = draftAnimations[mount === 'pterodactyl' || mount === 'egg' || isPlatformSprite(mount) ? 'player' : mount]
-  const showComposition = mode === 'animation' && mount !== 'pterodactyl' && mount !== 'egg' && !isPlatformSprite(mount) && controls.composition.checked
+  const capturePreview = mode === 'animation' && mount === 'lavaTroll' && controls.captureOverlay.checked
+  const captureMount = selectedCaptureMount()
+  const animation = draftAnimations[capturePreview ? captureMount : mount === 'pterodactyl' || mount === 'egg' || isFixedFrameSequence(mount) || isPlatformSprite(mount) ? 'player' : mount]
+  const showComposition = capturePreview || mode === 'animation' && mount !== 'pterodactyl' && mount !== 'egg' && !isFixedFrameSequence(mount) && !isPlatformSprite(mount) && controls.composition.checked
   const compositionDirection = facing < 0 ? 'left' : 'right'
   const compositionOffsetX = animation.riderOffset[compositionDirection]
+  const captureOffset = atlas.lavaTrollOverlayOffset ?? { x: 0, y: -18 }
+  const trollScale = 960 / atlas.width
+  const mountSize = animation.composition.mountSize
+  const riderSize = animation.composition.riderSize
+  const compositionBounds = {
+    left: Math.min(-mountSize.width / 2, compositionOffsetX - riderSize.width / 2),
+    right: Math.max(mountSize.width / 2, compositionOffsetX + riderSize.width / 2),
+    top: Math.min(-mountSize.height / 2, animation.composition.riderYOffset - riderSize.height / 2),
+    bottom: Math.max(mountSize.height / 2, animation.composition.riderYOffset + riderSize.height / 2),
+  }
+  const animationFrame = selectedAnimationFrame()
+  const trollFrame = capturePreview ? animationFrame : undefined
+  const contentBounds = capturePreview
+    ? {
+      left: Math.min(-trollFrame!.width * trollScale / 2, captureOffset.x + compositionBounds.left),
+      right: Math.max(trollFrame!.width * trollScale / 2, captureOffset.x + compositionBounds.right),
+      top: Math.min(-trollFrame!.height * trollScale / 2, captureOffset.y + compositionBounds.top),
+      bottom: Math.max(trollFrame!.height * trollScale / 2, captureOffset.y + compositionBounds.bottom),
+    }
+    : compositionBounds
   const width = mode === 'animation' && showComposition
-    ? Math.max(animation.composition.mountSize.width, animation.composition.riderSize.width + Math.abs(compositionOffsetX) * 2)
+    ? contentBounds.right - contentBounds.left
     : currentFrame().width
   const height = mode === 'animation' && showComposition
-    ? Math.max(animation.composition.mountSize.height, animation.composition.riderSize.height) + Math.abs(animation.composition.riderYOffset)
+    ? contentBounds.bottom - contentBounds.top
     : currentFrame().height
-  const inset = 64
-  canvas.width = Math.max(controls.viewport.clientWidth, width * scale + inset * 2)
-  canvas.height = Math.max(controls.viewport.clientHeight, height * scale + inset * 2)
+  sizeCanvasToArtwork(width * scale, height * scale)
   context.clearRect(0, 0, canvas.width, canvas.height)
 
   const centerX = canvas.width / 2
   const centerY = canvas.height / 2
   if (mode === 'animation' && showComposition) {
-    const mountSize = animation.composition.mountSize
-    drawCrop(selectedAnimationFrame(), centerX - mountSize.width * scale / 2, centerY - mountSize.height * scale / 2, mountSize.width * scale, mountSize.height * scale)
+    const originX = centerX - (contentBounds.left + contentBounds.right) * scale / 2
+    const originY = centerY - (contentBounds.top + contentBounds.bottom) * scale / 2
+    const compositionX = originX + (capturePreview ? captureOffset.x * scale : 0)
+    const compositionY = originY + (capturePreview ? captureOffset.y * scale : 0)
+    if (capturePreview) {
+      drawCrop(trollFrame!, originX - trollFrame!.width * trollScale * scale / 2, originY - trollFrame!.height * trollScale * scale / 2, trollFrame!.width * trollScale * scale, trollFrame!.height * trollScale * scale)
+    } else {
+      drawCrop(animationFrame, compositionX - mountSize.width * scale / 2, compositionY - mountSize.height * scale / 2, mountSize.width * scale, mountSize.height * scale)
+    }
 
-    const riderFrame = selectedRiderFrame()
+    const capturedMountFrame = capturePreview ? selectedCaptureMountFrame() : undefined
+    if (capturedMountFrame) {
+      drawCrop(capturedMountFrame, compositionX - mountSize.width * scale / 2, compositionY - mountSize.height * scale / 2, mountSize.width * scale, mountSize.height * scale)
+    }
+    const riderFrame = capturePreview ? selectedCaptureRiderFrame() : selectedRiderFrame()
     const riderSize = animation.composition.riderSize
-    const riderX = centerX + compositionOffsetX * scale
-    const riderY = centerY + animation.composition.riderYOffset * scale
+    const riderX = compositionX + compositionOffsetX * scale
+    const riderY = compositionY + animation.composition.riderYOffset * scale
     if ((animation.riderFacing === 'mount' ? facing : 1) < 0) {
       context.save()
       context.translate(riderX, riderY)
@@ -765,7 +870,7 @@ function drawPreview() {
     } else {
       drawCrop(riderFrame, riderX - riderSize.width * scale / 2, riderY - riderSize.height * scale / 2, riderSize.width * scale, riderSize.height * scale)
     }
-    drawGrid(scale, centerX - mountSize.width * scale / 2, centerY - mountSize.height * scale / 2, mountSize.width * scale, mountSize.height * scale)
+    drawGrid(scale, compositionX - mountSize.width * scale / 2, compositionY - mountSize.height * scale / 2, mountSize.width * scale, mountSize.height * scale)
   } else {
     const frame = currentFrame()
     const drawnWidth = frame.width * scale
@@ -799,6 +904,8 @@ function render(refreshDetails = true) {
       ? formatFrameName(selectedMount())
       : selectedMount() === 'egg'
       ? `Egg ${eggPoseLabels[frameIndex].toLowerCase()}`
+      : isFixedFrameSequence()
+        ? `${selectedMount() === 'lavaTroll' ? 'Lava Troll' : 'Animated Fire'} ${frameIndex + 1}`
       : selectedMount() === 'pterodactyl' ? 'Pterodactyl fly' : `${selectedMount()[0].toUpperCase()}${selectedMount().slice(1)} ${motion}`
     : mode === 'font'
       ? controls.fontGlyph.value === '000' ? 'Glyph 000' : `Glyph ${controls.fontGlyph.value}`
@@ -808,6 +915,8 @@ function render(refreshDetails = true) {
       ? `PLATFORM / ${selectedMount().replace('platform', '').toUpperCase()}`
       : selectedMount() === 'egg'
       ? `EGG / ${eggPoseLabels[frameIndex].toUpperCase()}`
+      : isFixedFrameSequence()
+        ? `${selectedMount() === 'lavaTroll' ? 'LAVA TROLL' : 'ANIMATED FIRE'} / FRAME ${frameIndex + 1}`
       : selectedMount() === 'pterodactyl'
         ? `PTERODACTYL / FLY / ${facing > 0 ? 'RIGHT' : 'LEFT'}`
         : `${selectedMount().toUpperCase()} / ${motion.toUpperCase()} / ${facing > 0 ? 'RIGHT' : 'LEFT'}`
@@ -823,6 +932,8 @@ function render(refreshDetails = true) {
         ? 'Platform crop · nearest-neighbor scaling'
         : mode === 'animation' && selectedMount() === 'egg'
           ? 'Egg sequence · nearest-neighbor scaling'
+          : mode === 'animation' && isFixedFrameSequence()
+            ? 'Sprite sequence · nearest-neighbor scaling'
           : mode === 'animation' && selectedMount() !== 'pterodactyl' && controls.composition.checked && selectedMount() !== 'player'
             ? 'Game composition · nearest-neighbor scaling'
             : 'Source pixels enlarged with nearest-neighbor scaling'
@@ -854,6 +965,8 @@ function changeFrame(step: number) {
     ? eggFrames().length
     : mount === 'pterodactyl'
       ? pterodactylFrames().length
+      : isFixedFrameSequence(mount)
+        ? fixedSequenceFrames(mount).length
       : draftAnimations[mount].strips[selectedStripName()].count
   frameIndex = (frameIndex + step + count) % count
   render()
@@ -939,6 +1052,8 @@ controls.zoom.addEventListener('input', () => {
 })
 controls.grid.addEventListener('change', render)
 controls.composition.addEventListener('change', render)
+controls.captureMount.addEventListener('change', render)
+controls.captureOverlay.addEventListener('change', render)
 controls.play.addEventListener('click', () => {
   if (resumeTimer !== undefined) window.clearTimeout(resumeTimer)
   resumeTimer = undefined
