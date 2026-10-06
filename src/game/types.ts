@@ -11,6 +11,9 @@ export interface Bird {
   reboundTimer: number
   invulnerability: number
   materializeTimer: number
+  lavaGrab?: { trollX: number; age: number }
+  lavaTrollWarning?: { trollX: number; age: number }
+  lavaTrollAttempted?: boolean
 }
 
 export interface Player extends Bird {
@@ -25,6 +28,8 @@ export interface Enemy extends Bird {
   flightDirection?: -1 | 1
   flightTimer?: number
   flightDecision?: number
+  groundedTime?: number
+  attackClimbing?: boolean
   mountArrivalX?: number
   mountArrivalDirection?: -1 | 1
 }
@@ -81,6 +86,9 @@ export interface GameState {
   mountDepartures: MountDeparture[]
   playerRespawnTimer: number
   platforms: Platform[]
+  lavaSurfaceY: number
+  lavaRiseStarted: boolean
+  lavaBurnProgress: number
   message: string
   messageTimer: number
   nextEnemyId: number
