@@ -10,7 +10,7 @@ const LAVA_FIRE_RANDOM_SEED = Math.random() * 43758.5453
 
 let spriteAtlas: HTMLImageElement | undefined
 const titleArtwork = new Image()
-titleArtwork.src = '/assets/joust-title.webp'
+titleArtwork.src = `${import.meta.env.BASE_URL}assets/joust-title.webp`
 const tintedGlyphs = new Map<string, HTMLCanvasElement>()
 let tintedPlayerIcon: HTMLCanvasElement | undefined
 
