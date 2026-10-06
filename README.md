@@ -20,13 +20,13 @@ Use Left/Right or A/D to steer. Press Z once to flap upward; release and press a
 ## Potential Art and Sound References
 
 - [Joust NES sound effects - The Sounds Resource](https://sounds.spriters-resource.com/nes/joust/asset/397793/) lists a downloadable set of sound effects for consideration.
-- [Joust pixel-art sprite sheet (608 x 512)](https://i.pinimg.com/originals/85/18/64/851864d48f862c473596aac08957707d.jpg) is a visual reference for potential pixel-art assets.
+- [Joust pixel-art sprite sheet (608 x 512)](public/assets/joust-sprites.jpg) is the bundled atlas used by the game and inspector.
 
-Check usage and redistribution terms before bundling third-party art or audio.
+Confirm usage and redistribution terms before distributing the bundled sprite sheet.
 
 ## P3 Media
 
-The browser game loads the selected sprite atlas from its supplied URL and uses animated player/Bounder/Hunter mounts, static direction-aware rider overlays, and tiled platform art, with vector fallbacks while loading. The image is not bundled because its reuse terms are unclear. Gameplay sound cues are synthesized with Web Audio; the linked WAV pack is likewise not bundled unless reuse is confirmed.
+The browser game loads its bundled sprite atlas from `public/assets/joust-sprites.jpg` and uses animated player/Bounder/Hunter mounts, static direction-aware rider overlays, and tiled platform art, with vector fallbacks while loading. Gameplay sound cues are synthesized with Web Audio; the linked WAV pack is not bundled unless reuse is confirmed.
 
 ## Checks
 
