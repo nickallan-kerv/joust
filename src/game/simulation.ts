@@ -5,6 +5,15 @@ export const GAME_HEIGHT = 540
 export const BIRD_RADIUS = 19
 export const PLATFORM_CONTACT_RADIUS = 28
 export const LAVA_Y = 510
+export const LAVA_SURFACE_START_Y = LAVA_Y - 2
+export const LAVA_SURFACE_PLATFORM_TOP_Y = 442
+export const LAVA_SURFACE_WAVE2_Y = 451
+export const LAVA_SURFACE_WAVE3_Y = (LAVA_SURFACE_START_Y + LAVA_SURFACE_PLATFORM_TOP_Y) / 2
+export const LAVA_SURFACE_MAX_Y = LAVA_SURFACE_WAVE2_Y
+export const LAVA_RISE_SPEED = 24
+export const WAVE_TRANSITION_PAUSE = 1.1
+export const LAVA_BURN_LEFT_STOP_X = 241
+export const LAVA_BURN_RIGHT_STOP_X = 719
 export const LAVA_PITS = [
   { x: 0, width: 240 },
   { x: 720, width: 240 },
@@ -23,6 +32,14 @@ const FLAP_IMPULSE = 520
 const MAX_RISE_SPEED = 520
 const AI_FLAP_IMPULSE = 430
 const AI_MAX_RISE_SPEED = 440
+const BOUNDER_GROUNDED_TAKEOFF_DELAY = 1.8
+const AI_GROUNDED_ATTACK_HEIGHT = 24
+const AI_GROUNDED_ATTACK_DISTANCE = 120
+export const LAVA_TROLL_ANIMATION_FPS = 12
+export const LAVA_TROLL_GRAB_START_FRAME = 4
+const LAVA_TROLL_TRIGGER_HEIGHT = 112
+const LAVA_TROLL_GRAB_DURATION = 0.18
+const LAVA_TROLL_DRAG_SPEED = 120
 const HATCH_MOUNT_ARRIVAL_SPEED = 300
 type EnemyBehavior = 'bounder' | 'hunter' | 'pterodactyl'
 
@@ -102,6 +119,9 @@ export function createGameState(): GameState {
     mountDepartures: [],
     playerRespawnTimer: 0,
     platforms: platformsForWave(1),
+    lavaSurfaceY: LAVA_SURFACE_START_Y,
+    lavaRiseStarted: false,
+    lavaBurnProgress: 0,
     message: '',
     messageTimer: 0,
     nextEnemyId: 0,
@@ -113,6 +133,7 @@ export function createGameState(): GameState {
 function spawnWave(game: GameState) {
   game.wave += 1
   game.waveDelay = 0
+  game.lavaRiseStarted = false
   game.platforms = platformsForWave(game.wave)
   const count = Math.min(2 + Math.floor((game.wave - 1) / 2), ENEMY_SPAWN_POINTS.length)
 
@@ -230,9 +251,8 @@ function moveBird(
   flapCooldown = FLAP_COOLDOWN,
   airAcceleration = 260,
 ) {
+  if (bird.lavaGrab) return
   if (bird.materializeTimer > 0) {
-    const direction = Number(input.right) - Number(input.left) || input.facingPress || 0
-    if (direction !== 0) bird.facing = direction < 0 ? -1 : 1
     bird.materializeTimer = Math.max(0, bird.materializeTimer - dt)
     bird.vx = 0
     bird.vy = 0
@@ -279,6 +299,7 @@ function moveBird(
 }
 
 function respawnPlayer(game: GameState) {
+  delete game.player.lavaGrab
   Object.assign(game.player, makeBird(PLAYER_SPAWN_POINT.x, PLAYER_SPAWN_POINT.y, 1), {
     score: game.player.score,
     lives: game.player.lives,
@@ -325,6 +346,7 @@ function loseLife(game: GameState, message: string, flyMountOff = false) {
 }
 
 function updateEnemy(game: GameState, enemy: Enemy, dt: number) {
+  if (enemy.lavaGrab) return
   if (enemy.mountArrivalX !== undefined && enemy.mountArrivalDirection !== undefined) {
     const arrivalX = enemy.mountArrivalX + enemy.mountArrivalDirection * HATCH_MOUNT_ARRIVAL_SPEED * dt
     const hasArrived = enemy.mountArrivalDirection > 0 ? arrivalX >= enemy.x : arrivalX <= enemy.x
@@ -365,7 +387,33 @@ function updateEnemy(game: GameState, enemy: Enemy, dt: number) {
   enemy.flightTimer = flightTimer
   enemy.flightDecision = flightDecision
 
-  let shouldFlap = !isGrounded(enemy, game.platforms, platformContactRadius)
+  const grounded = isGrounded(enemy, game.platforms, platformContactRadius)
+  const groundedLowPlayer = game.player.y > GAME_HEIGHT * 0.65 && isGrounded(game.player, game.platforms)
+  const horizontalDistance = Math.abs(deltaX)
+  if (behavior === 'bounder' && grounded && enemy.y > GAME_HEIGHT * 0.65) {
+    enemy.groundedTime = (enemy.groundedTime ?? 0) + dt
+  } else {
+    enemy.groundedTime = 0
+  }
+  const forcedTakeoff = behavior === 'bounder' && enemy.groundedTime >= BOUNDER_GROUNDED_TAKEOFF_DELAY
+  if (behavior === 'bounder') {
+    if (!groundedLowPlayer || enemy.y <= game.player.y - AI_GROUNDED_ATTACK_HEIGHT) {
+      enemy.attackClimbing = false
+    } else if (enemy.attackClimbing || horizontalDistance < AI_GROUNDED_ATTACK_DISTANCE && (forcedTakeoff || !grounded)) {
+      enemy.attackClimbing = true
+    }
+  } else {
+    enemy.attackClimbing = false
+  }
+  const climbingForAttack = behavior === 'bounder' && Boolean(enemy.attackClimbing)
+  const needsAttackAltitude = groundedLowPlayer && (behavior === 'pterodactyl' || behavior === 'bounder') &&
+    horizontalDistance < AI_GROUNDED_ATTACK_DISTANCE && enemy.y > game.player.y - AI_GROUNDED_ATTACK_HEIGHT
+  if (climbingForAttack) {
+    horizontal = deltaX === 0 ? currentDirection : deltaX > 0 ? -1 : 1
+    enemy.flightDirection = horizontal as -1 | 1
+    enemy.flightTimer = 0.2
+  }
+  let shouldFlap = !grounded || forcedTakeoff || climbingForAttack || needsAttackAltitude
   const platformUnderEnemy = game.platforms.find((platform) =>
     Math.abs(enemy.y + platformContactRadius - platform.y) <= 1 &&
     enemy.x >= platform.x - BIRD_RADIUS &&
@@ -379,7 +427,7 @@ function updateEnemy(game: GameState, enemy: Enemy, dt: number) {
     horizontal = distanceToLeft < distanceToRight ? -1 : 1
     enemy.flightDirection = horizontal as -1 | 1
     enemy.flightTimer = 0.55
-    shouldFlap = false
+    shouldFlap = forcedTakeoff || climbingForAttack || needsAttackAltitude
   }
 
   const blockedByPlatform = game.platforms.some((platform) => {
@@ -392,12 +440,63 @@ function updateEnemy(game: GameState, enemy: Enemy, dt: number) {
 
   const baseFlapBias = enemy.kind === 'pterodactyl' ? -0.2 : enemy.hatchLevel > 0 ? 0 : 0.12
   const flapBias = baseFlapBias + (enemyVariation(enemy.id, 0, 6) - 0.5) * 0.28
-  const flap = blockedByPlatform || (shouldFlap && (enemy.y > game.player.y + 6 || Math.sin(game.time * 1.7 + enemy.id * 0.8) > flapBias))
+  const flap = blockedByPlatform || (shouldFlap && (
+    forcedTakeoff || climbingForAttack || needsAttackAltitude || enemy.y > game.player.y + 6 ||
+    Math.sin(game.time * 1.7 + enemy.id * 0.8) > flapBias
+  ))
   const baseSpeedMultiplier = enemy.kind === 'pterodactyl' ? 1.4 : 1 + enemy.hatchLevel * 0.18
   const speedStep = Math.floor(game.time / 2)
   const speedMultiplier = baseSpeedMultiplier * (0.78 + enemyVariation(enemy.id, speedStep, 2) * 0.44)
   const airAcceleration = AI_AIR_ACCELERATION[behavior] * (0.75 + enemyVariation(enemy.id, speedStep, 5) * 0.5)
   moveBird(enemy, { left: horizontal < -0.2, right: horizontal > 0.2, flap }, dt, game.platforms, speedMultiplier, platformContactRadius, AI_FLAP_IMPULSE, AI_MAX_RISE_SPEED, AI_FLAP_COOLDOWN, airAcceleration)
+}
+
+function updateLavaGrab(game: GameState, bird: Bird, dt: number, platformContactRadius: number, variationId: number) {
+  if (bird.lavaGrab) {
+    bird.lavaGrab.age += dt
+    bird.x = bird.lavaGrab.trollX
+    bird.vx = 0
+    if (bird.lavaGrab.age >= LAVA_TROLL_GRAB_DURATION) {
+      bird.vy = LAVA_TROLL_DRAG_SPEED
+      bird.y = Math.min(LAVA_Y - BIRD_RADIUS, bird.y + LAVA_TROLL_DRAG_SPEED * dt)
+    } else {
+      bird.vy = 0
+    }
+    return
+  }
+
+  const pit = LAVA_PITS.find(({ x, width }) => bird.x >= x && bird.x <= x + width)
+  const exposed = pit && !game.platforms.some((platform) =>
+    platform.burnsAway && platform.dissolveTimer === undefined && bird.x >= platform.x && bird.x <= platform.x + platform.width,
+  )
+  const lowAndFlying = bird.materializeTimer <= 0 && !isGrounded(bird, game.platforms, platformContactRadius) &&
+    bird.y + BIRD_RADIUS >= LAVA_Y - LAVA_TROLL_TRIGGER_HEIGHT
+  if (!pit || !exposed || !lowAndFlying) {
+    bird.lavaTrollAttempted = false
+    delete bird.lavaTrollWarning
+    return
+  }
+
+  const trollX = Math.max(pit.x + 16, Math.min(pit.x + pit.width - 16, bird.x))
+  if (bird.lavaTrollWarning) {
+    bird.lavaTrollWarning.age += dt
+    bird.lavaTrollWarning.trollX = trollX
+    if (bird.lavaTrollWarning.age >= LAVA_TROLL_GRAB_START_FRAME / LAVA_TROLL_ANIMATION_FPS) {
+      bird.lavaGrab = { trollX, age: 0 }
+      delete bird.lavaTrollWarning
+      bird.vx = 0
+      bird.vy = 0
+    }
+    return
+  }
+  if (bird.lavaTrollAttempted) return
+  bird.lavaTrollAttempted = true
+  if (enemyVariation(variationId, Math.floor(game.time * 10), 11) >= 1 / 3) return
+
+  bird.lavaTrollWarning = {
+    trollX,
+    age: 0,
+  }
 }
 
 function dropEgg(game: GameState, enemy: Enemy) {
@@ -487,11 +586,11 @@ function spawnPterodactyl(game: GameState) {
 }
 
 function checkJousts(game: GameState) {
-  if (game.player.invulnerability > 0 || game.playerRespawnTimer > 0 || game.player.materializeTimer > 0) return
+  if (game.player.lavaGrab || game.player.invulnerability > 0 || game.playerRespawnTimer > 0 || game.player.materializeTimer > 0) return
 
   for (let index = game.enemies.length - 1; index >= 0; index -= 1) {
     const enemy = game.enemies[index]
-    if (enemy.materializeTimer > 0) continue
+    if (enemy.lavaGrab || enemy.materializeTimer > 0) continue
     const horizontalDistance = Math.abs(wrappedDelta(game.player.x, enemy.x))
     if (horizontalDistance > BIRD_RADIUS * 1.7 || Math.abs(game.player.y - enemy.y) > BIRD_RADIUS * 1.65) continue
     if (enemy.collisionCooldown > 0) continue
@@ -550,7 +649,11 @@ export function stepGame(game: GameState, input: InputState, dt: number) {
   }
 
   if (game.playerRespawnTimer <= 0) moveBird(game.player, input, dt, game.platforms)
+  updateLavaGrab(game, game.player, dt, PLATFORM_CONTACT_RADIUS, -1)
   for (const enemy of game.enemies) updateEnemy(game, enemy, dt)
+  for (const enemy of game.enemies) {
+    updateLavaGrab(game, enemy, dt, enemy.kind === 'pterodactyl' ? BIRD_RADIUS : PLATFORM_CONTACT_RADIUS, enemy.id)
+  }
   game.timeSinceKill += dt
 
   for (let index = game.enemies.length - 1; index >= 0; index -= 1) {
@@ -568,27 +671,39 @@ export function stepGame(game: GameState, input: InputState, dt: number) {
 
   if (game.mode !== 'playing') return
   if (game.enemies.length === 0 && game.eggs.length === 0) {
-    game.waveDelay += dt
+    if (!game.lavaRiseStarted) {
+      game.lavaRiseStarted = true
+    }
+    const requestedRiseTargetY = game.wave === 2 ? LAVA_SURFACE_WAVE2_Y : LAVA_SURFACE_WAVE3_Y
+    const lavaRiseTargetY = Math.min(game.lavaSurfaceY, requestedRiseTargetY)
+    game.lavaSurfaceY = Math.max(lavaRiseTargetY, game.lavaSurfaceY - LAVA_RISE_SPEED * dt)
+    if (game.lavaSurfaceY - lavaRiseTargetY < 1e-6) game.lavaSurfaceY = lavaRiseTargetY
     const lavaCovers = game.platforms.filter((platform) => platform.burnsAway)
     if (game.wave === 2 && lavaCovers.length > 0) {
       const startingDissolve = lavaCovers.some((platform) => platform.dissolveTimer === undefined)
       if (startingDissolve) {
         for (const platform of lavaCovers) platform.dissolveTimer = LAVA_PLATFORM_DISSOLVE_DURATION
+        game.lavaBurnProgress = 0
         game.message = 'LAVA PLATFORMS CRUMBLING'
         game.messageTimer = LAVA_PLATFORM_DISSOLVE_DURATION
       } else {
         for (const platform of lavaCovers) {
           platform.dissolveTimer = Math.max(0, platform.dissolveTimer! - dt)
         }
+        game.lavaBurnProgress = Math.min(1, 1 - Math.max(...lavaCovers.map((platform) => platform.dissolveTimer!)) / LAVA_PLATFORM_DISSOLVE_DURATION)
         if (lavaCovers.every((platform) => platform.dissolveTimer === 0)) {
+          game.lavaBurnProgress = 1
           game.platforms = game.platforms.filter((platform) => !platform.burnsAway)
-          spawnWave(game)
         }
       }
-    } else if (game.waveDelay >= 1.1) {
-      spawnWave(game)
+    }
+    const coversCleared = game.wave !== 2 || !game.platforms.some((platform) => platform.burnsAway)
+    if (game.lavaSurfaceY === lavaRiseTargetY && coversCleared) {
+      game.waveDelay += dt
+      if (game.waveDelay >= WAVE_TRANSITION_PAUSE) spawnWave(game)
     }
   } else {
     game.waveDelay = 0
+    game.lavaRiseStarted = false
   }
 }
