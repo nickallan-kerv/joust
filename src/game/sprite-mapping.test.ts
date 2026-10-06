@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { spriteAnimations, spriteAtlases, validateSpriteDefinitions } from './sprite-data'
-import { getBounderStandingFrame, getEggFrame, getEggSpritePose, getFontGlyph, getKnockOffExplosionFrame, getMountFrame, getPlayerIconFrame, getPlatformFrame, getPterodactylFrame, getRiderFrame, getRiderHorizontalOffset, getRiderSpriteFacing, getSpriteAtlasImage, getSpriteAtlasWidth, getSpriteBlendMode, getSpriteComposition } from './sprite-mapping'
+import { getLavaBubblePosition, LAVA_BUBBLE_BURST_HEIGHT, LAVA_BUBBLE_INTERVAL, LAVA_BUBBLE_LIFETIME, LAVA_BUBBLE_RISE_SPEED, LAVA_BUBBLE_SPAWN_CHANCE } from './lava-effects'
+import { getBounderStandingFrame, getEggFrame, getEggSpritePose, getFontGlyph, getKnockOffExplosionFrame, getLavaFireFrame, getLavaTrollFrame, getLavaTrollOverlayOffset, getMountFrame, getPlayerIconFrame, getPlatformFrame, getPterodactylFrame, getRiderFrame, getRiderHorizontalOffset, getRiderSpriteFacing, getSpriteAtlasImage, getSpriteAtlasWidth, getSpriteBlendMode, getSpriteComposition } from './sprite-mapping'
 
 describe('Joust sprite atlas mappings', () => {
   it('maps the HUD player icon to its configured atlas crop', () => {
@@ -125,6 +126,64 @@ describe('Joust sprite atlas mappings', () => {
     expect(getPterodactylFrame(1)).toEqual(frames[1])
     expect(getPterodactylFrame(2)).toEqual(frames[2])
     expect(getPterodactylFrame(3)).toEqual(frames[0])
+  })
+
+  it('cycles through all seven animated lava fire frames', () => {
+    const frames = Array.from({ length: 7 }, (_, index) => spriteAtlases.joust.frames[`animatedFire${index + 1}`])
+    for (let index = 0; index < frames.length; index += 1) {
+      expect(getLavaFireFrame(index)).toEqual(frames[index])
+    }
+    expect(getLavaFireFrame(frames.length)).toEqual(frames[0])
+  })
+
+  it('keeps early-wave fire across the full surface and bubbles it upward', () => {
+    const position = { wave: 2, surfaceY: 451, frameWidth: 20, frameHeight: 32, scale: 1.5, horizontalRoll: 0.5, pitRoll: 0, depthRoll: 0 }
+    const start = getLavaBubblePosition({ ...position, age: 0 })
+    const rising = getLavaBubblePosition({ ...position, age: 0.2 })
+      const justAboveSurface = getLavaBubblePosition({ ...position, age: 1.4 })
+    const afterBurst = getLavaBubblePosition({ ...position, age: LAVA_BUBBLE_LIFETIME })
+    const leftEdge = getLavaBubblePosition({ ...position, horizontalRoll: 0, age: 0 })
+    const rightEdge = getLavaBubblePosition({ ...position, horizontalRoll: 1, age: 0 })
+
+    expect(start.x).toBeGreaterThan(240)
+    expect(start.x).toBeLessThan(720)
+    expect(leftEdge.x).toBeGreaterThanOrEqual(0)
+    expect(rightEdge.x).toBeLessThanOrEqual(960)
+    expect(start.y - position.frameHeight * position.scale / 2).toBeGreaterThanOrEqual(position.surfaceY)
+    expect(start.visible).toBe(true)
+    expect(rising.y).toBe(start.y - LAVA_BUBBLE_RISE_SPEED * 0.2)
+    expect(rising.visible).toBe(true)
+    expect(justAboveSurface.y + position.frameHeight * position.scale / 2).toBeLessThan(position.surfaceY)
+    expect(justAboveSurface.visible).toBe(true)
+    expect(afterBurst.y + position.frameHeight * position.scale / 2).toBeCloseTo(position.surfaceY - LAVA_BUBBLE_BURST_HEIGHT)
+    expect(afterBurst.visible).toBe(false)
+  })
+
+  it('keeps later-wave bubbles inside one of the edge lava pits', () => {
+    const position = { wave: 3, surfaceY: 475, age: 0, frameWidth: 20, frameHeight: 32, scale: 1.5, horizontalRoll: 0.5, depthRoll: 0.5 }
+    const left = getLavaBubblePosition({ ...position, pitRoll: 0 })
+    const right = getLavaBubblePosition({ ...position, pitRoll: 0.99 })
+
+    expect(left.x).toBeLessThanOrEqual(240)
+    expect(right.x).toBeGreaterThanOrEqual(720)
+  })
+
+  it('spawns bubbles more frequently while letting them rise more slowly', () => {
+    expect(LAVA_BUBBLE_INTERVAL).toBeLessThan(0.4)
+    expect(LAVA_BUBBLE_SPAWN_CHANCE).toBeGreaterThan(0.7)
+    expect(LAVA_BUBBLE_RISE_SPEED).toBeLessThan(72)
+  })
+
+  it('cycles through all six Lava Troll grab frames', () => {
+    const frames = Array.from({ length: 6 }, (_, index) => spriteAtlases.joust.frames[`lavaTroll${index + 1}`])
+    for (let index = 0; index < frames.length; index += 1) {
+      expect(getLavaTrollFrame(index)).toEqual(frames[index])
+    }
+    expect(getLavaTrollFrame(frames.length)).toEqual(frames[0])
+  })
+
+  it('exposes the configured Lava Troll capture offset to gameplay', () => {
+    expect(getLavaTrollOverlayOffset()).toEqual(spriteAtlases.joust.lavaTrollOverlayOffset)
   })
 
   it('maps the six egg poses to their named atlas crops', () => {
