@@ -3,6 +3,7 @@ import { defineConfig } from 'vite'
 import { spriteSavePlugin } from './vite-plugin-sprite-save.ts'
 
 export default defineConfig({
+  base: process.env.GITHUB_ACTIONS === 'true' ? '/joust/' : '/',
   plugins: [spriteSavePlugin(fileURLToPath(new URL('./src/game/sprites/', import.meta.url)))],
   build: {
     rollupOptions: {
