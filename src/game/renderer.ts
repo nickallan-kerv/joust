@@ -1,10 +1,16 @@
-import { BIRD_MATERIALIZE_DURATION, BIRD_RADIUS, EGG_HATCH_TIME, EGG_RADIUS, GAME_HEIGHT, GAME_WIDTH, isGrounded, LAVA_PITS, LAVA_PLATFORM_DISSOLVE_DURATION, LAVA_Y, MOUNT_DEPARTURE_DURATION, PLATFORM_CONTACT_RADIUS } from './simulation'
-import { getBounderStandingFrame, getEggFrame, getEggSpritePose, getFontGlyph, getKnockOffExplosionFrame, getMountFrame, getPlayerIconFrame, getPlatformFrame, getPterodactylFrame, getRiderFrame, getRiderHorizontalOffset, getRiderSpriteFacing, getSpriteAtlasImage, getSpriteAtlasWidth, getSpriteBlendMode, getSpriteComposition, type MountClass } from './sprite-mapping'
+import { BIRD_MATERIALIZE_DURATION, BIRD_RADIUS, EGG_HATCH_TIME, EGG_RADIUS, GAME_HEIGHT, GAME_WIDTH, isGrounded, LAVA_BURN_LEFT_STOP_X, LAVA_BURN_RIGHT_STOP_X, LAVA_PITS, LAVA_PLATFORM_DISSOLVE_DURATION, LAVA_TROLL_ANIMATION_FPS, LAVA_TROLL_GRAB_START_FRAME, LAVA_Y, MOUNT_DEPARTURE_DURATION, PLATFORM_CONTACT_RADIUS } from './simulation'
+import { getLavaBubblePosition, LAVA_BUBBLE_INTERVAL, LAVA_BUBBLE_LIFETIME, LAVA_BUBBLE_SPAWN_CHANCE } from './lava-effects'
+import { getBounderStandingFrame, getEggFrame, getEggSpritePose, getFontGlyph, getKnockOffExplosionFrame, getLavaFireFrame, getLavaTrollFrame, getLavaTrollOverlayOffset, getMountFrame, getPlayerIconFrame, getPlatformFrame, getPterodactylFrame, getRiderFrame, getRiderHorizontalOffset, getRiderSpriteFacing, getSpriteAtlasImage, getSpriteAtlasWidth, getSpriteBlendMode, getSpriteComposition, type MountClass } from './sprite-mapping'
 import type { Bird, Egg, Enemy, GameState, MountDeparture } from './types'
 
 const PLATFORM_COLOR = '#91c6a1'
+const LAVA_FIRE_LIFETIME = 0.85
+const LAVA_FIRE_FRAMES_PER_SECOND = 8
+const LAVA_FIRE_RANDOM_SEED = Math.random() * 43758.5453
 
 let spriteAtlas: HTMLImageElement | undefined
+const titleArtwork = new Image()
+titleArtwork.src = '/assets/joust-title.webp'
 const tintedGlyphs = new Map<string, HTMLCanvasElement>()
 let tintedPlayerIcon: HTMLCanvasElement | undefined
 
@@ -299,26 +305,112 @@ function drawPlatforms(context: CanvasRenderingContext2D, game: GameState) {
 }
 
 function drawLava(context: CanvasRenderingContext2D, game: GameState) {
-  for (const [index, pit] of LAVA_PITS.entries()) {
-    const visualPit = index === 0
-      ? { x: pit.x, width: pit.width + 52 }
-      : { x: pit.x - 52, width: pit.width + 52 }
-    const cover = game.platforms.find((platform) =>
-      platform.burnsAway && platform.x < visualPit.x + visualPit.width && platform.x + platform.width > visualPit.x,
-    )
-    const pitTop = cover && cover.dissolveTimer === undefined ? Math.max(443, cover.y + cover.height) : 443
-    context.fillStyle = '#9f4937'
-    context.fillRect(visualPit.x, pitTop, visualPit.width, GAME_HEIGHT - pitTop)
-    context.fillStyle = '#e96e4b'
-    context.fillRect(visualPit.x + 4, LAVA_Y, visualPit.width - 8, GAME_HEIGHT - LAVA_Y)
-    for (let index = 0; index < 4; index += 1) {
-      const drift = (game.time * 34 + index * 27) % (visualPit.width + 22)
-      context.fillStyle = index % 2 === 0 ? '#f29a54' : '#d95742'
-      context.fillRect(visualPit.x + drift - 12, 459 + index * 19, 17, 3)
-    }
-    context.fillStyle = '#d9ee65'
-    context.fillRect(visualPit.x + 8, LAVA_Y - 2, visualPit.width - 16, 2)
+  const surfaceY = game.lavaSurfaceY
+  context.fillStyle = '#9f4937'
+  context.fillRect(0, surfaceY, GAME_WIDTH, GAME_HEIGHT - surfaceY)
+  context.fillStyle = '#d9ee65'
+  context.fillRect(0, surfaceY, GAME_WIDTH, 2)
+
+  drawLavaBubbles(context, game, surfaceY)
+  drawLavaFire(context, game)
+}
+
+function drawLavaBubbles(context: CanvasRenderingContext2D, game: GameState, surfaceY: number) {
+  if (game.mode !== 'playing') return
+  const lastSpawn = Math.floor(game.time / LAVA_BUBBLE_INTERVAL)
+  const firstSpawn = Math.max(0, lastSpawn - Math.ceil(LAVA_BUBBLE_LIFETIME / LAVA_BUBBLE_INTERVAL))
+  const frame = getLavaFireFrame(6)
+  const scale = Math.min(GAME_WIDTH / getSpriteAtlasWidth(), (GAME_HEIGHT - surfaceY) * 0.75 / frame.height)
+  if (scale <= 0) return
+
+  for (let spawn = firstSpawn; spawn <= lastSpawn; spawn += 1) {
+    const birthTime = spawn * LAVA_BUBBLE_INTERVAL
+    const age = game.time - birthTime
+    if (age < 0 || age >= LAVA_BUBBLE_LIFETIME || lavaRandom(spawn, 7) >= LAVA_BUBBLE_SPAWN_CHANCE) continue
+    const position = getLavaBubblePosition({
+      wave: game.wave,
+      surfaceY,
+      age,
+      frameWidth: frame.width,
+      frameHeight: frame.height,
+      scale,
+      horizontalRoll: lavaRandom(spawn, 9),
+      pitRoll: lavaRandom(spawn, 8),
+      depthRoll: lavaRandom(spawn, 10),
+    })
+    if (!position.visible) continue
+    context.save()
+    context.globalAlpha = 1 - Math.min(1, age / LAVA_BUBBLE_LIFETIME)
+    drawAtlasFrame(context, frame, position.x, position.y, false, frame.width * scale, frame.height * scale)
+    context.restore()
   }
+}
+
+function drawLavaBurnFronts(context: CanvasRenderingContext2D, game: GameState) {
+  if (game.mode !== 'playing' || game.wave !== 2 || game.lavaBurnProgress <= 0 ||
+      !game.platforms.some((platform) => platform.burnsAway)) return
+
+  const frame = getLavaFireFrame(Math.floor(game.time * LAVA_FIRE_FRAMES_PER_SECOND))
+  const scale = GAME_WIDTH / getSpriteAtlasWidth()
+  const halfWidth = frame.width * scale / 2
+  const leftStart = halfWidth
+  const leftStop = LAVA_BURN_LEFT_STOP_X - halfWidth
+  const rightStart = GAME_WIDTH - halfWidth
+  const rightStop = LAVA_BURN_RIGHT_STOP_X + halfWidth
+  const leftX = leftStart + (leftStop - leftStart) * game.lavaBurnProgress
+  const rightX = rightStart + (rightStop - rightStart) * game.lavaBurnProgress
+
+  drawAtlasFrame(context, frame, leftX, 442, false, frame.width * scale, frame.height * scale)
+  drawAtlasFrame(context, frame, rightX, 442, true, frame.width * scale, frame.height * scale)
+}
+
+function lavaRandom(second: number, salt: number): number {
+  const value = Math.sin((second + 1) * 127.1 + salt * 311.7 + LAVA_FIRE_RANDOM_SEED) * 43758.5453
+  return value - Math.floor(value)
+}
+
+function drawLavaFire(context: CanvasRenderingContext2D, game: GameState) {
+  if (game.mode !== 'playing') return
+  const second = Math.floor(game.time)
+  const elapsed = game.time - second
+  if (elapsed >= LAVA_FIRE_LIFETIME || lavaRandom(second, 1) >= 1 / 3) return
+
+  const horizontalPosition = lavaRandom(second, 3)
+  const x = game.wave < 3
+    ? 20 + horizontalPosition * (GAME_WIDTH - 40)
+    : (() => {
+      const pit = LAVA_PITS[Math.floor(lavaRandom(second, 2) * LAVA_PITS.length)]
+      return pit.x + 20 + horizontalPosition * (pit.width - 40)
+    })()
+  const frame = getLavaFireFrame(Math.floor(elapsed * LAVA_FIRE_FRAMES_PER_SECOND))
+  const scale = GAME_WIDTH / getSpriteAtlasWidth()
+  drawAtlasFrame(context, frame, x, game.lavaSurfaceY - frame.height * scale / 2, false, frame.width * scale, frame.height * scale)
+}
+
+function drawLavaTroll(context: CanvasRenderingContext2D, trollX: number, frameIndex: number) {
+  const frame = getLavaTrollFrame(frameIndex)
+  const scale = GAME_WIDTH / getSpriteAtlasWidth()
+  const trollY = LAVA_Y - frame.height * scale / 2
+  drawAtlasFrame(context, frame, trollX, trollY, false, frame.width * scale, frame.height * scale)
+  return trollY
+}
+
+function drawCapturedCharacter(context: CanvasRenderingContext2D, bird: Bird | Enemy, time: number, trollY: number) {
+  const offset = getLavaTrollOverlayOffset()
+  const capturedBird = {
+    ...bird,
+    x: (bird.lavaGrab?.trollX ?? bird.x) + offset.x,
+    y: trollY + offset.y,
+  }
+
+  if ('kind' in bird && bird.kind === 'pterodactyl') {
+    drawPterodactyl(context, { ...bird, x: capturedBird.x, y: capturedBird.y }, time, true)
+    return
+  }
+
+  const isPlayer = !('kind' in bird)
+  const mountClass: MountClass = isPlayer ? 'player' : bird.hatchLevel > 0 ? 'hunter' : 'bounder'
+  drawBird(context, capturedBird, isPlayer ? '#44bda1' : '#d55f49', time, isPlayer, true, mountClass)
 }
 
 function drawEgg(context: CanvasRenderingContext2D, egg: Egg, time: number) {
@@ -404,7 +496,7 @@ function drawBird(
   const bottomOffset = Math.max(composition.mountSize.height / 2, composition.riderYOffset + composition.riderSize.height / 2)
   const materialization = clipToMaterialization(context, bird, topOffset, bottomOffset - topOffset)
   beginMaterializationDraw(context, materialization)
-  const moving = Math.abs(bird.vx) > 8
+  const moving = Math.abs(bird.vx) > 8 || Math.abs(bird.vy) > 8
   const frame = getMountFrame(mountClass, bird.facing, flying, moving, Math.floor(time * (flying ? 10 : 8)))
   if (drawAtlasFrame(context, frame, bird.x, bird.y, false, composition.mountSize.width, composition.mountSize.height)) {
     const rider = getRiderFrame(mountClass, bird.facing)
@@ -563,12 +655,17 @@ function drawOverlay(context: CanvasRenderingContext2D, game: GameState) {
   context.textAlign = 'center'
 
   if (game.mode === 'title') {
-    drawGameText(context, 'AERIAL COMBAT / ONE PLAYER', GAME_WIDTH / 2, 177, 13, '#d9ee65', "500 13px 'DM Mono', monospace", 760)
-    drawGameText(context, 'JOUST', GAME_WIDTH / 2, 250, 82, '#f1f0d9', "700 82px 'Barlow Condensed', Impact, sans-serif", 780)
+    if (titleArtwork.complete && titleArtwork.naturalWidth > 0) {
+      const width = Math.min(titleArtwork.naturalWidth, GAME_WIDTH - 80)
+      const height = titleArtwork.naturalHeight * width / titleArtwork.naturalWidth
+      context.imageSmoothingEnabled = true
+      context.drawImage(titleArtwork, (GAME_WIDTH - width) / 2, 224 - height / 2, width, height)
+      context.imageSmoothingEnabled = false
+    }
     drawGameText(context, 'FLAP TO CLIMB. STRIKE FROM ABOVE.', GAME_WIDTH / 2, 312, 13, '#9fc6af', "500 13px 'DM Mono', monospace", 820)
     drawGameText(context, '← / → MOVE     Z FLAP     ENTER START', GAME_WIDTH / 2, 357, 12, '#d9ee65', "500 12px 'DM Mono', monospace", 760)
   } else {
-    drawGameText(context, 'FLIGHT LOG CLOSED', GAME_WIDTH / 2, 205, 13, '#e96e4b', "500 13px 'DM Mono', monospace", 760)
+    drawGameText(context, 'THY JOUST IS OVER', GAME_WIDTH / 2, 205, 13, '#e96e4b', "500 13px 'DM Mono', monospace", 760)
     drawGameText(context, 'GAME OVER', GAME_WIDTH / 2, 282, 76, '#f1f0d9', "700 76px 'Barlow Condensed', Impact, sans-serif", 780)
     drawGameText(context, `FINAL SCORE  ${String(game.player.score).padStart(5, '0')}`, GAME_WIDTH / 2, 330, 15, '#d9ee65', "500 15px 'DM Mono', monospace", 760)
     drawGameText(context, 'PRESS ENTER TO FLY AGAIN', GAME_WIDTH / 2, 376, 12, '#9fc6af', "500 12px 'DM Mono', monospace", 760)
@@ -583,9 +680,30 @@ export function renderGame(context: CanvasRenderingContext2D, game: GameState) {
   drawBackground(context)
   drawLava(context, game)
   drawPlatforms(context, game)
+  drawLavaBurnFronts(context, game)
 
   for (const egg of game.eggs) drawEgg(context, egg, game.time)
   for (const enemy of game.enemies) {
+    if (enemy.lavaTrollWarning) {
+      drawLavaTroll(context, enemy.lavaTrollWarning.trollX, Math.floor(enemy.lavaTrollWarning.age * LAVA_TROLL_ANIMATION_FPS))
+    } else if (enemy.lavaGrab) {
+      const grabFrame = LAVA_TROLL_GRAB_START_FRAME + Math.min(1, Math.floor(enemy.lavaGrab.age * LAVA_TROLL_ANIMATION_FPS))
+      drawLavaTroll(context, enemy.lavaGrab.trollX, grabFrame)
+    }
+  }
+  let playerTrollY: number | undefined
+  if (game.player.lavaTrollWarning) {
+    drawLavaTroll(context, game.player.lavaTrollWarning.trollX, Math.floor(game.player.lavaTrollWarning.age * LAVA_TROLL_ANIMATION_FPS))
+  } else if (game.player.lavaGrab) {
+    const grabFrame = LAVA_TROLL_GRAB_START_FRAME + Math.min(1, Math.floor(game.player.lavaGrab.age * LAVA_TROLL_ANIMATION_FPS))
+    playerTrollY = drawLavaTroll(context, game.player.lavaGrab.trollX, grabFrame)
+  }
+  for (const enemy of game.enemies) {
+    if (enemy.lavaGrab) {
+      const trollY = LAVA_Y - getLavaTrollFrame(Math.floor(game.time * 12)).height * (GAME_WIDTH / getSpriteAtlasWidth()) / 2
+      drawCapturedCharacter(context, enemy, game.time, trollY)
+      continue
+    }
     const platformContactRadius = enemy.kind === 'pterodactyl' ? BIRD_RADIUS : PLATFORM_CONTACT_RADIUS
     const flying = !isGrounded(enemy, game.platforms, platformContactRadius)
     if (enemy.kind === 'pterodactyl') drawPterodactyl(context, enemy, game.time, flying)
@@ -593,7 +711,8 @@ export function renderGame(context: CanvasRenderingContext2D, game: GameState) {
     else drawBird(context, enemy, '#d55f49', game.time, false, flying, enemy.hatchLevel > 0 ? 'hunter' : 'bounder')
   }
   if (game.mode !== 'gameover' && game.playerRespawnTimer <= 0 && (game.player.invulnerability <= 0 || Math.floor(game.time * 14) % 2 === 0)) {
-    drawBird(context, game.player, '#44bda1', game.time, true, !isGrounded(game.player, game.platforms), 'player')
+    if (playerTrollY !== undefined) drawCapturedCharacter(context, game.player, game.time, playerTrollY)
+    else drawBird(context, game.player, '#44bda1', game.time, true, !isGrounded(game.player, game.platforms), 'player')
   }
   for (const departure of game.mountDepartures) drawMountDeparture(context, departure, game.time)
 
