@@ -72,6 +72,65 @@ test('inspects the egg movement and hatching sequence', async ({ page, appUrl })
   }
 })
 
+test('inspects the Lava Troll and animated fire sequences', async ({ page, appUrl }) => {
+  await page.goto(new URL('/sprite-inspector/', appUrl).toString())
+  await page.getByRole('button', { name: 'Pause animation' }).click()
+
+  await page.getByLabel('Sprite', { exact: true }).selectOption('lavaTroll')
+  await expect(page.getByLabel('Animation frame')).toHaveAttribute('max', '5')
+  await expect(page.locator('#details-title')).toHaveText('Lava Troll 1')
+  const expectCurrentFrameBounds = async () => {
+    const startX = Number(await page.getByRole('spinbutton', { name: 'Start X' }).inputValue())
+    const startY = Number(await page.getByRole('spinbutton', { name: 'Start Y' }).inputValue())
+    const width = Number(await page.getByRole('spinbutton', { name: 'Frame width' }).inputValue())
+    const height = Number(await page.getByRole('spinbutton', { name: 'Frame height' }).inputValue())
+    await expect(page.locator('[data-summary="source-rect"]')).toHaveText(`${startX}, ${startY}, ${width} × ${height} px`)
+    expect(startX + width).toBeLessThanOrEqual(608)
+    expect(startY + height).toBeLessThanOrEqual(512)
+  }
+  await expectCurrentFrameBounds()
+  await page.getByRole('button', { name: 'Next frame' }).click()
+  await page.getByLabel('Animation frame').fill('5')
+  await expect(page.locator('#mapping-details')).toContainText('lavaTroll6')
+
+  await page.getByLabel('Sprite', { exact: true }).selectOption('fire')
+  await expect(page.getByLabel('Animation frame')).toHaveAttribute('max', '6')
+  await expect(page.locator('#details-title')).toHaveText('Animated Fire 1')
+  await expectCurrentFrameBounds()
+  await page.getByLabel('Animation frame').fill('6')
+  await expect(page.locator('#mapping-details')).toContainText('animatedFire7')
+})
+
+test('previews a captured mount over the Lava Troll and edits its offset', async ({ page, appUrl }) => {
+  await page.goto(new URL('/sprite-inspector/', appUrl).toString())
+  await page.getByRole('button', { name: 'Pause animation' }).click()
+  await page.getByLabel('Sprite', { exact: true }).selectOption('lavaTroll')
+
+  await expect(page.locator('#capture-controls')).toBeVisible()
+  await expect(page.getByLabel('Show captured mount')).toBeChecked()
+  await expect(page.getByLabel('Facing direction')).toBeVisible()
+  const captureBounds = await page.locator('#capture-controls').boundingBox()
+  const facingBounds = await page.locator('#facing-controls').boundingBox()
+  expect(captureBounds).not.toBeNull()
+  expect(facingBounds).not.toBeNull()
+  expect(captureBounds!.y + captureBounds!.height).toBeLessThan(facingBounds!.y)
+  await page.getByLabel('Captured mount', { exact: true }).selectOption('bounder')
+  await expect(page.locator('#mapping-details')).toContainText('Bounder')
+  const offsetY = page.getByRole('spinbutton', { name: 'Capture offset Y' })
+  const configuredOffsetY = Number(await offsetY.inputValue())
+
+  await page.getByRole('button', { name: 'Increase Capture offset Y by one' }).click()
+  await expect(offsetY).toHaveValue(String(configuredOffsetY + 1))
+  await expect(page.getByRole('button', { name: 'Save JSON' })).toBeEnabled()
+  await page.getByRole('button', { name: 'Undo last edit' }).click()
+  await expect(offsetY).toHaveValue(String(configuredOffsetY))
+
+  await page.getByLabel('Show captured mount').uncheck()
+  await expect(page.getByLabel('Facing direction')).toBeVisible()
+  await expect(page.locator('#facing-controls')).toHaveJSProperty('offsetTop', facingBounds!.y)
+  await expect(offsetY).toHaveValue(String(configuredOffsetY))
+})
+
 test('edits the Player native-facing rider composition', async ({ page, appUrl }) => {
   await page.goto(new URL('/sprite-inspector/', appUrl).toString())
   const composition = page.getByLabel('Show rider composition')
@@ -236,30 +295,76 @@ test('resumes after an edit only when playback was already active', async ({ pag
   await expect(page.locator('#play-toggle')).toHaveText('Play')
 })
 
-test('keeps the preview canvas viewport-sized until sprite bounds exceed it', async ({ page, appUrl }) => {
+test('sizes the preview canvas to the magnified artwork bounds', async ({ page, appUrl }) => {
   await page.goto(new URL('/sprite-inspector/', appUrl).toString())
   await page.getByLabel('Show rider composition').uncheck()
+  const frameWidth = Number(await page.getByRole('spinbutton', { name: 'Frame width' }).inputValue())
+  const frameHeight = Number(await page.getByRole('spinbutton', { name: 'Frame height' }).inputValue())
   const zoom = page.getByLabel('Magnification')
   await zoom.focus()
   await zoom.press('Home')
 
   const lowZoom = await page.evaluate(() => {
-    const viewport = document.querySelector<HTMLElement>('#canvas-viewport')!
     const canvas = document.querySelector<HTMLCanvasElement>('#sprite-canvas')!
-    return { viewport: [viewport.clientWidth, viewport.clientHeight], canvas: [canvas.width, canvas.height] }
+    return [canvas.width, canvas.height]
   })
-  expect(lowZoom.canvas).toEqual(lowZoom.viewport)
+  expect(lowZoom).toEqual([frameWidth, frameHeight])
 
   await zoom.press('End')
   const highZoom = await page.evaluate(() => {
-    const viewport = document.querySelector<HTMLElement>('#canvas-viewport')!
     const canvas = document.querySelector<HTMLCanvasElement>('#sprite-canvas')!
-    return { viewport: [viewport.clientWidth, viewport.clientHeight], canvas: [canvas.width, canvas.height] }
+    return [canvas.width, canvas.height]
   })
-    const frameWidth = Number(await page.getByRole('spinbutton', { name: 'Frame width' }).inputValue())
-    const frameHeight = Number(await page.getByRole('spinbutton', { name: 'Frame height' }).inputValue())
-    expect(highZoom.canvas[0]).toBe(Math.max(highZoom.viewport[0], frameWidth * 12 + 128))
-    expect(highZoom.canvas[1]).toBe(Math.max(highZoom.viewport[1], frameHeight * 12 + 128))
+  expect(highZoom).toEqual([frameWidth * 12, frameHeight * 12])
+})
+
+test('does not show vertical overflow for the composed Player at 12x when its bounds fit', async ({ page, appUrl }) => {
+  await page.setViewportSize({ width: 1920, height: 860 })
+  await page.goto(new URL('/sprite-inspector/', appUrl).toString())
+  await expect(page.getByLabel('Show rider composition')).toBeChecked()
+  await page.getByLabel('Magnification').fill('12')
+
+  const mountHeight = Number(await page.getByRole('spinbutton', { name: 'Mount draw height' }).inputValue())
+  const riderHeight = Number(await page.getByRole('spinbutton', { name: 'Rider draw height' }).inputValue())
+  const riderOffsetY = Number(await page.getByRole('spinbutton', { name: 'Rider offset Y' }).inputValue())
+  const top = Math.min(-mountHeight / 2, riderOffsetY - riderHeight / 2)
+  const bottom = Math.max(mountHeight / 2, riderOffsetY + riderHeight / 2)
+  const expectedHeight = Math.ceil((bottom - top) * 12)
+  const dimensions = await page.locator('#canvas-viewport').evaluate((viewport) => ({
+    clientHeight: viewport.clientHeight,
+    scrollHeight: viewport.scrollHeight,
+    clientWidth: viewport.clientWidth,
+    scrollWidth: viewport.scrollWidth,
+    canvasHeight: document.querySelector<HTMLCanvasElement>('#sprite-canvas')!.height,
+    canvasWidth: document.querySelector<HTMLCanvasElement>('#sprite-canvas')!.width,
+  }))
+
+  expect(dimensions.canvasHeight).toBe(expectedHeight)
+  expect(dimensions.scrollHeight).toBe(dimensions.clientHeight)
+})
+
+test('shows scrollbars only for dimensions that exceed the preview viewport', async ({ page, appUrl }) => {
+  await page.setViewportSize({ width: 1920, height: 700 })
+  await page.goto(new URL('/sprite-inspector/', appUrl).toString())
+  await page.getByRole('tab', { name: 'Atlas' }).click()
+  await page.getByLabel('Magnification').fill('2')
+
+  const verticalOnly = await page.locator('#canvas-viewport').evaluate((viewport) => ({
+    horizontal: viewport.scrollWidth > viewport.clientWidth + 1,
+    vertical: viewport.scrollHeight > viewport.clientHeight + 1,
+  }))
+  expect(verticalOnly).toEqual({ horizontal: false, vertical: true })
+
+  await page.setViewportSize({ width: 1280, height: 1000 })
+  await page.goto(new URL('/sprite-inspector/', appUrl).toString())
+  await page.getByRole('tab', { name: 'Atlas' }).click()
+  await page.getByLabel('Atlas view').selectOption('platformLong')
+
+  const horizontalOnly = await page.locator('#canvas-viewport').evaluate((viewport) => ({
+    horizontal: viewport.scrollWidth > viewport.clientWidth + 1,
+    vertical: viewport.scrollHeight > viewport.clientHeight + 1,
+  }))
+  expect(horizontalOnly).toEqual({ horizontal: true, vertical: false })
 })
 
 test('maps and saves individual bitmap font glyph crops', async ({ page, appUrl }) => {
