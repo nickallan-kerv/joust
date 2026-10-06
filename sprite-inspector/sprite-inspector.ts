@@ -1090,5 +1090,5 @@ function animate(time: number) {
 
 restoreSaveEditorSession()
 render()
-setImage(atlas.image, 'Configured atlas')
+setImage(`${import.meta.env.BASE_URL}${atlas.image.replace(/^\/+/, '')}`, 'Configured atlas')
 requestAnimationFrame(animate)
