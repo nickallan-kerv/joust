@@ -113,7 +113,7 @@ export function getPlatformFrame(platform: boolean | PlatformSpriteName): Sprite
 }
 
 export function getSpriteAtlasImage(): string {
-  return joustAtlas.image
+  return `${import.meta.env.BASE_URL}${joustAtlas.image.replace(/^\/+/, '')}`
 }
 
 export function getSpriteAtlasWidth(): number {
