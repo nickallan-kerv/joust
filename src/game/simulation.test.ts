@@ -9,10 +9,17 @@ import {
   BIRD_MATERIALIZE_DURATION,
   LAVA_Y,
   LAVA_PLATFORM_DISSOLVE_DURATION,
+  LAVA_RISE_SPEED,
+  LAVA_BURN_LEFT_STOP_X,
+  LAVA_BURN_RIGHT_STOP_X,
+  LAVA_SURFACE_START_Y,
+  LAVA_SURFACE_WAVE2_Y,
+  LAVA_SURFACE_WAVE3_Y,
   MOUNT_DEPARTURE_DURATION,
   PLAYER_SPAWN_POINT,
   PTERODACTYL_DELAY,
   PLATFORM_CONTACT_RADIUS,
+  WAVE_TRANSITION_PAUSE,
   SPAWN_POINTS,
   resolveJoust,
   startGame as startGameWithMaterialization,
@@ -57,9 +64,8 @@ describe('flight simulation', () => {
     game.player.invulnerability = 1
 
     stepGame(game, { ...noInput, flap: true }, 1 / 60)
-    for (let frame = 0; frame < 9; frame += 1) stepGame(game, noInput, 1 / 60)
+    for (let frame = 0; frame < 91; frame += 1) stepGame(game, noInput, 1 / 60)
     const velocityBeforeSecondFlap = game.player.vy
-
     stepGame(game, { ...noInput, flap: true }, 1 / 60)
 
     expect(game.player.vy).toBeLessThan(velocityBeforeSecondFlap)
@@ -234,7 +240,9 @@ describe('flight simulation', () => {
     startGame(game)
     game.enemies = []
     game.wave = 4
-    game.waveDelay = 1.1
+    game.waveDelay = WAVE_TRANSITION_PAUSE
+    game.lavaSurfaceY = LAVA_SURFACE_WAVE3_Y
+    game.lavaRiseStarted = true
 
     stepGame(game, noInput, 1 / 60)
 
@@ -290,6 +298,49 @@ describe('flight simulation', () => {
     stepGame(game, noInput, 1 / 60)
     expect(enemy.vy).toBe(0)
     expect(isGrounded(enemy, game.platforms)).toBe(true)
+  })
+
+  it('takes a grounded Bounder into the sky after a short idle stretch', () => {
+    const game = createGameState()
+    startGame(game)
+    const enemy = game.enemies[0]
+    if (!enemy) throw new Error('Expected a spawned enemy.')
+    const floor = game.platforms.find(({ sprite }) => sprite === 'platformLong')!
+    enemy.x = 480
+    enemy.y = floor.y - PLATFORM_CONTACT_RADIUS
+    enemy.vx = 0
+    enemy.vy = 0
+    enemy.flapCooldown = 0
+    game.player.x = 100
+    game.player.y = 100
+
+    expect(isGrounded(enemy, game.platforms)).toBe(true)
+    for (let frame = 0; frame < 132; frame += 1) stepGame(game, noInput, 1 / 60)
+
+    expect(enemy.y).toBeLessThan(floor.y - PLATFORM_CONTACT_RADIUS - 30)
+  })
+
+  it('makes a Bounder leave the tie lane and strike a stationary ground player', () => {
+    const game = createGameState()
+    startGame(game)
+    const enemy = game.enemies[0]
+    if (!enemy) throw new Error('Expected a spawned enemy.')
+    game.enemies = [enemy]
+    const floor = game.platforms.find(({ sprite }) => sprite === 'platformLong')!
+    game.player.x = 480
+    game.player.y = floor.y - PLATFORM_CONTACT_RADIUS
+    game.player.vx = 0
+    game.player.vy = 0
+    enemy.materializeTimer = 0
+    let tieClashes = 0
+
+    for (let frame = 0; frame < 12 * 60 && game.player.lives === 4; frame += 1) {
+      stepGame(game, noInput, 1 / 60)
+      if (game.message === 'LANCES CLASH' && game.messageTimer > 0.64) tieClashes += 1
+    }
+
+    expect(game.player.lives).toBeLessThan(4)
+    expect(tieClashes).toBeLessThanOrEqual(1)
   })
 
   it('flaps a grounded enemy when Platform Spawn Tall blocks its path', () => {
@@ -625,6 +676,23 @@ describe('flight simulation', () => {
     expect({ x: game.player.x, y: game.player.y }).toEqual(playerSpawn)
   })
 
+  it('ignores movement and flap input while the player is materializing', () => {
+    const game = createGameState()
+    startGameWithMaterialization(game)
+    const player = game.player
+    const startingPosition = { x: player.x, y: player.y }
+    const startingFacing = player.facing
+    player.vx = 80
+    player.vy = -120
+
+    stepGame(game, { ...noInput, left: true, flap: true }, 1 / 60)
+
+    expect({ x: player.x, y: player.y }).toEqual(startingPosition)
+    expect(player.facing).toBe(startingFacing)
+    expect(player.vx).toBe(0)
+    expect(player.vy).toBe(0)
+  })
+
   it('scores and removes an enemy defeated from above', () => {
     const game = createGameState()
     startGame(game)
@@ -703,7 +771,9 @@ describe('flight simulation', () => {
     const game = createGameState()
     startGame(game)
     game.enemies = []
-    stepGame(game, noInput, 1.1)
+    const transitionFrames = Math.ceil((LAVA_SURFACE_START_Y - LAVA_SURFACE_WAVE3_Y) / LAVA_RISE_SPEED * 60) +
+      Math.ceil(WAVE_TRANSITION_PAUSE * 60)
+    for (let frame = 0; frame < transitionFrames; frame += 1) stepGame(game, noInput, 1 / 60)
     expect(game.wave).toBe(2)
     expect(game.enemies.length).toBeGreaterThan(0)
   })
@@ -826,6 +896,87 @@ describe('flight simulation', () => {
     expect(game.player.y).toBe(PLAYER_SPAWN_POINT.y)
   })
 
+  it('starts the Troll warning only when lava is exposed and grabs on frame five', () => {
+    const game = createGameState()
+    startGame(game)
+    const enemy = game.enemies[0]
+    if (!enemy) throw new Error('Expected a spawned enemy.')
+    game.enemies = []
+    game.player.x = 120
+    game.player.y = LAVA_Y - BIRD_RADIUS - 108
+    game.player.vy = 0
+    game.player.invulnerability = 10
+    game.player.x = 480
+    stepGame(game, noInput, 1 / 60)
+    expect(game.player.lavaTrollWarning).toBeUndefined()
+    expect(game.player.lavaGrab).toBeUndefined()
+
+    game.platforms = game.platforms.filter((platform) => !platform.burnsAway)
+    game.player.x = 120
+    game.player.y = LAVA_Y - BIRD_RADIUS - 108
+    game.player.vy = 0
+    stepGame(game, noInput, 1 / 60)
+    expect(game.player.lavaTrollWarning).toBeDefined()
+    expect(game.player.lavaGrab).toBeUndefined()
+    const warningStartY = game.player.y
+    for (let frame = 0; frame < 19; frame += 1) stepGame(game, noInput, 1 / 60)
+    expect(game.player.lavaGrab).toBeUndefined()
+    expect(game.player.y).toBeGreaterThan(warningStartY)
+    stepGame(game, noInput, 1 / 60)
+    expect(game.player.lavaGrab).toBeDefined()
+    expect(game.player.lavaTrollWarning).toBeUndefined()
+  })
+
+  it('does not repeatedly retry a declined Lava Troll grab while a character stays low', () => {
+    const game = createGameState()
+    startGame(game)
+    const enemy = game.enemies[0]
+    if (!enemy) throw new Error('Expected a spawned enemy.')
+    game.enemies = [enemy]
+    game.platforms = game.platforms.filter((platform) => !platform.burnsAway)
+    game.player.x = 480
+    game.player.y = 100
+    enemy.id = 1
+    enemy.x = 120
+    enemy.y = LAVA_Y - BIRD_RADIUS - 35
+    enemy.vy = 0
+    enemy.flapCooldown = 1
+
+    stepGame(game, noInput, 1 / 60)
+    expect(enemy.lavaTrollAttempted).toBe(true)
+    expect(enemy.lavaGrab).toBeUndefined()
+    stepGame(game, noInput, 1 / 60)
+    expect(enemy.lavaGrab).toBeUndefined()
+  })
+
+  it('lets the Lava Troll drag the player and enemies into exposed lava', () => {
+    const game = createGameState()
+    startGame(game)
+    const enemy = game.enemies[0]
+    if (!enemy) throw new Error('Expected a spawned enemy.')
+    game.enemies = [enemy]
+    game.platforms = game.platforms.filter((platform) => !platform.burnsAway)
+    game.player.x = 120
+    game.player.y = LAVA_Y - BIRD_RADIUS - 108
+    game.player.vy = 0
+    game.player.invulnerability = 10
+    enemy.x = 800
+    enemy.y = LAVA_Y - BIRD_RADIUS - 108
+    enemy.vy = 0
+    enemy.flapCooldown = 1
+
+    stepGame(game, noInput, 1 / 60)
+    expect(game.player.lavaTrollWarning).toBeDefined()
+    expect(enemy.lavaTrollWarning).toBeDefined()
+    for (let frame = 0; frame < 20; frame += 1) stepGame(game, noInput, 1 / 60)
+    expect(game.player.lavaGrab).toBeDefined()
+    expect(enemy.lavaGrab).toBeDefined()
+    for (let frame = 0; frame < 36; frame += 1) stepGame(game, noInput, 1 / 60)
+
+    expect(game.player.lives).toBe(3)
+    expect(game.enemies).toHaveLength(0)
+  })
+
   it('covers both edge lava pools through wave two, then removes the covers', () => {
     const game = createGameState()
     startGame(game)
@@ -848,15 +999,111 @@ describe('flight simulation', () => {
     for (let frame = 0; frame < 90; frame += 1) stepGame(game, noInput, 1 / 60)
     expect(game.platforms.filter((platform) => platform.burnsAway)).toHaveLength(2)
     expect(game.platforms.filter((platform) => platform.burnsAway).every((platform) => platform.dissolveTimer! < 1.6)).toBe(true)
+    expect(LAVA_SURFACE_WAVE2_Y).toBe(451)
+    expect(game.lavaSurfaceY).toBeGreaterThan(LAVA_SURFACE_WAVE2_Y)
+    expect(game.lavaSurfaceY).toBeLessThan(LAVA_SURFACE_START_Y)
+    expect(game.lavaBurnProgress).toBeGreaterThan(0.4)
+    expect(game.lavaBurnProgress).toBeLessThan(1)
+    const shortLeft = game.platforms.find((platform) => platform.sprite === 'platformShortLeft')!
+    const shortRight = game.platforms.find((platform) => platform.sprite === 'platformShortRight')!
+    expect(LAVA_BURN_LEFT_STOP_X).toBe(shortLeft.x)
+    expect(LAVA_BURN_RIGHT_STOP_X).toBe(shortRight.x + shortRight.width)
 
     for (let frame = 0; frame < 91; frame += 1) stepGame(game, noInput, 1 / 60)
 
-    expect(game.wave).toBe(3)
+    expect(game.wave).toBe(2)
     expect(game.platforms.filter((platform) => platform.burnsAway)).toHaveLength(0)
+    expect(game.lavaBurnProgress).toBe(1)
+    expect(game.lavaSurfaceY).toBe(LAVA_SURFACE_WAVE2_Y)
+    for (let frame = 0; frame < Math.ceil(WAVE_TRANSITION_PAUSE * 60); frame += 1) stepGame(game, noInput, 1 / 60)
+    expect(game.wave).toBe(3)
     const centerPlatform = game.platforms.find((platform) => platform.y === 442)
     expect(centerPlatform?.x).toBe(240)
     expect(centerPlatform?.width).toBe(480)
     expect(centerPlatform?.sprite).toBe('platformLong')
+  })
+
+  it('raises lava to the lowest platform top, then pauses before the next wave', () => {
+    const game = createGameState()
+    startGame(game)
+    game.wave = 3
+    game.enemies = []
+    game.eggs = []
+    game.player.x = 480
+    game.player.y = 442 - PLATFORM_CONTACT_RADIUS
+    game.player.vy = 0
+    const floor = game.platforms.find((platform) => platform.sprite === 'platformLong')!
+
+    for (let frame = 0; frame < Math.ceil((LAVA_SURFACE_START_Y - LAVA_SURFACE_WAVE3_Y) / LAVA_RISE_SPEED * 60); frame += 1) {
+      stepGame(game, noInput, 1 / 60)
+    }
+    expect(LAVA_SURFACE_WAVE3_Y).toBe(475)
+    expect(game.lavaSurfaceY).toBe(LAVA_SURFACE_WAVE3_Y)
+    expect(game.lavaSurfaceY).toBeGreaterThan(floor.y)
+    expect(game.lavaSurfaceY).toBe(475)
+    expect(game.wave).toBe(3)
+    expect(game.waveDelay).toBeLessThan(WAVE_TRANSITION_PAUSE)
+
+    for (let frame = 0; frame < Math.ceil(WAVE_TRANSITION_PAUSE * 60); frame += 1) stepGame(game, noInput, 1 / 60)
+    expect(game.lavaSurfaceY).toBe(LAVA_SURFACE_WAVE3_Y)
+    expect(game.wave).toBe(4)
+    expect(game.lavaSurfaceY).toBe(LAVA_SURFACE_WAVE3_Y)
+  })
+
+  it('never lowers the lava after Wave 3 has reached a higher surface', () => {
+    const game = createGameState()
+    startGame(game)
+    game.wave = 3
+    game.enemies = []
+    game.eggs = []
+    game.lavaSurfaceY = LAVA_SURFACE_WAVE2_Y
+    game.player.x = 480
+    game.player.y = 442 - PLATFORM_CONTACT_RADIUS
+    game.player.vy = 0
+
+    for (let frame = 0; frame < Math.ceil(WAVE_TRANSITION_PAUSE * 60); frame += 1) {
+      stepGame(game, noInput, 1 / 60)
+      expect(game.lavaSurfaceY).toBe(LAVA_SURFACE_WAVE2_Y)
+    }
+    expect(game.wave).toBe(4)
+
+    game.enemies = []
+    for (let frame = 0; frame < Math.ceil(WAVE_TRANSITION_PAUSE * 60); frame += 1) {
+      stepGame(game, noInput, 1 / 60)
+      expect(game.lavaSurfaceY).toBe(LAVA_SURFACE_WAVE2_Y)
+    }
+    expect(game.wave).toBe(5)
+  })
+
+  it('keeps lava monotonic through seven accelerated wave transitions', () => {
+    const game = createGameState()
+    startGame(game)
+    game.enemies = []
+    game.eggs = []
+    game.player.x = 480
+    game.player.y = 442 - PLATFORM_CONTACT_RADIUS
+    game.player.vy = 0
+    game.player.invulnerability = 1000
+    let highestSurfaceY = game.lavaSurfaceY
+    const surfaceAtWave = new Map<number, number>([[game.wave, game.lavaSurfaceY]])
+
+    for (let frame = 0; frame < 2000 && game.wave < 7; frame += 1) {
+      game.enemies = []
+      game.eggs = []
+      game.timeSinceKill = 0
+      const previousWave = game.wave
+      stepGame(game, noInput, 1 / 60)
+      expect(game.lavaSurfaceY).toBeLessThanOrEqual(highestSurfaceY)
+      highestSurfaceY = game.lavaSurfaceY
+      if (game.wave !== previousWave) surfaceAtWave.set(game.wave, game.lavaSurfaceY)
+    }
+
+    expect(game.wave).toBe(7)
+    expect(surfaceAtWave.get(2)).toBe(LAVA_SURFACE_WAVE3_Y)
+    expect(surfaceAtWave.get(3)).toBe(LAVA_SURFACE_WAVE2_Y)
+    for (let wave = 4; wave <= 7; wave += 1) {
+      expect(surfaceAtWave.get(wave)).toBe(LAVA_SURFACE_WAVE2_Y)
+    }
   })
 
   it('spawns a pterodactyl after the inactivity timer expires', () => {
@@ -884,6 +1131,28 @@ describe('flight simulation', () => {
     stepGame(game, noInput, 0.2)
 
     expect(pterodactyl.x).toBeGreaterThan(initialX)
+  })
+
+  it('keeps the Pterodactyl above a stationary ground player through its attack', () => {
+    const game = createGameState()
+    startGame(game)
+    game.enemies = []
+    game.player.x = 480
+    const floor = game.platforms.find(({ sprite }) => sprite === 'platformLong')!
+    game.player.y = floor.y - PLATFORM_CONTACT_RADIUS
+    game.player.vy = 0
+    game.timeSinceKill = PTERODACTYL_DELAY
+
+    stepGame(game, noInput, 1 / 60)
+    const pterodactyl = game.enemies.find((enemy) => enemy.kind === 'pterodactyl')
+    if (!pterodactyl) throw new Error('Expected a spawned Pterodactyl.')
+
+    for (let frame = 0; frame < 8 * 60 && game.player.lives === 4; frame += 1) {
+      stepGame(game, noInput, 1 / 60)
+    }
+
+    expect(game.player.lives).toBeLessThan(4)
+    expect(game.enemies).toContain(pterodactyl)
   })
 
   it('lets a higher player joust a pterodactyl for bonus points', () => {
