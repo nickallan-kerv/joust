@@ -15,6 +15,8 @@ const pterodactylFrames = [
   joustAtlas.frames.pterodactylFlyLeft2,
   joustAtlas.frames.pterodactylFlyLeft3,
 ]
+const lavaFireFrames = Array.from({ length: 7 }, (_, index) => joustAtlas.frames[`animatedFire${index + 1}`])
+const lavaTrollFrames = Array.from({ length: 6 }, (_, index) => joustAtlas.frames[`lavaTroll${index + 1}`])
 
 export function getFontGlyph(character: string): SpriteFrame | undefined {
   return joustAtlas.font?.glyphs[character.toUpperCase()]
@@ -30,6 +32,18 @@ export function getBounderStandingFrame(): SpriteFrame {
 
 export function getPterodactylFrame(animationTick: number): SpriteFrame {
   return pterodactylFrames[((animationTick % pterodactylFrames.length) + pterodactylFrames.length) % pterodactylFrames.length]
+}
+
+export function getLavaFireFrame(animationTick: number): SpriteFrame {
+  return lavaFireFrames[((animationTick % lavaFireFrames.length) + lavaFireFrames.length) % lavaFireFrames.length]
+}
+
+export function getLavaTrollFrame(animationTick: number): SpriteFrame {
+  return lavaTrollFrames[((animationTick % lavaTrollFrames.length) + lavaTrollFrames.length) % lavaTrollFrames.length]
+}
+
+export function getLavaTrollOverlayOffset(): { x: number; y: number } {
+  return joustAtlas.lavaTrollOverlayOffset ?? { x: 0, y: -18 }
 }
 
 export function getKnockOffExplosionFrame(frameIndex: number): SpriteFrame {
