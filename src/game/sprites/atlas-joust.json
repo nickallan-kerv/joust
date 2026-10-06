@@ -1,9 +1,13 @@
 {
   "id": "joust",
-  "image": "https://i.pinimg.com/originals/85/18/64/851864d48f862c473596aac08957707d.jpg",
+  "image": "/assets/joust-sprites.jpg",
   "width": 608,
   "height": 512,
   "blendMode": "screen",
+  "lavaTrollOverlayOffset": {
+    "x": 0,
+    "y": -27
+  },
   "frames": {
     "playerIcon": {
       "x": 531,
@@ -178,6 +182,84 @@
       "y": 255,
       "width": 36,
       "height": 24
+    },
+    "lavaTroll1": {
+      "x": 480,
+      "y": 254,
+      "width": 12,
+      "height": 36
+    },
+    "lavaTroll2": {
+      "x": 502,
+      "y": 254,
+      "width": 14,
+      "height": 36
+    },
+    "lavaTroll3": {
+      "x": 528,
+      "y": 254,
+      "width": 23,
+      "height": 36
+    },
+    "lavaTroll4": {
+      "x": 562,
+      "y": 254,
+      "width": 24,
+      "height": 36
+    },
+    "lavaTroll5": {
+      "x": 0,
+      "y": 294,
+      "width": 28,
+      "height": 36
+    },
+    "lavaTroll6": {
+      "x": 38,
+      "y": 295,
+      "width": 28,
+      "height": 36
+    },
+    "animatedFire1": {
+      "x": 83,
+      "y": 291,
+      "width": 6,
+      "height": 20
+    },
+    "animatedFire2": {
+      "x": 103,
+      "y": 291,
+      "width": 14,
+      "height": 20
+    },
+    "animatedFire3": {
+      "x": 135,
+      "y": 294,
+      "width": 7,
+      "height": 10
+    },
+    "animatedFire4": {
+      "x": 151,
+      "y": 297,
+      "width": 20,
+      "height": 24
+    },
+    "animatedFire5": {
+      "x": 181,
+      "y": 301,
+      "width": 14,
+      "height": 22
+    },
+    "animatedFire6": {
+      "x": 211,
+      "y": 294,
+      "width": 13,
+      "height": 25
+    },
+    "animatedFire7": {
+      "x": 238,
+      "y": 294,
+      "width": 12,
+      "height": 12
     }
   },
   "font": {
