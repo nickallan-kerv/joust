@@ -24,6 +24,7 @@ export interface SpriteAtlasDefinition {
   width: number
   height: number
   blendMode: 'screen' | 'source-over'
+  lavaTrollOverlayOffset?: { x: number; y: number }
   frames: Record<string, SpriteFrame>
   font?: {
     rows: Array<{
@@ -64,6 +65,11 @@ function requireInteger(value: unknown, label: string, minimum = 0): number {
   if (!Number.isInteger(value) || (value as number) < minimum) {
     throw new Error(`${label} must be an integer greater than or equal to ${minimum}.`)
   }
+  return value as number
+}
+
+function requireSignedInteger(value: unknown, label: string): number {
+  if (!Number.isInteger(value)) throw new Error(`${label} must be an integer.`)
   return value as number
 }
 
@@ -109,6 +115,14 @@ export function validateSpriteDefinitions(
     }
     const frames = asRecord(atlas.frames, `Atlas "${atlas.id}" frames`)
     if (atlases[atlas.id]) throw new Error(`Duplicate atlas id "${atlas.id}".`)
+    let lavaTrollOverlayOffset: SpriteAtlasDefinition['lavaTrollOverlayOffset']
+    if (atlas.lavaTrollOverlayOffset !== undefined) {
+      const offset = asRecord(atlas.lavaTrollOverlayOffset, `Atlas "${atlas.id}" Lava Troll overlay offset`)
+      lavaTrollOverlayOffset = {
+        x: requireSignedInteger(offset.x, `Atlas "${atlas.id}" Lava Troll overlay offset x`),
+        y: requireSignedInteger(offset.y, `Atlas "${atlas.id}" Lava Troll overlay offset y`),
+      }
+    }
 
     for (const [frameName, frameValue] of Object.entries(frames)) {
       const frame = asRecord(frameValue, `Frame "${frameName}"`)
@@ -161,7 +175,11 @@ export function validateSpriteDefinitions(
       }
       font = { rows: fontDefinition.rows as SpriteAtlasDefinition['font'] extends infer T ? T extends { rows: infer R } ? R : never : never, glyphs }
     }
-    atlases[atlas.id] = { ...atlas, ...(font ? { font } : {}) } as unknown as SpriteAtlasDefinition
+    atlases[atlas.id] = {
+      ...atlas,
+      ...(font ? { font } : {}),
+      ...(lavaTrollOverlayOffset ? { lavaTrollOverlayOffset } : {}),
+    } as unknown as SpriteAtlasDefinition
   }
 
   const animations: Partial<Record<MountClass, SpriteAnimationDefinition>> = {}
