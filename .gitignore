@@ -15,8 +15,6 @@ dist-ssr
 coverage/
 test-results/
 playwright-report/
-public/assets/joust-sprites.jpg
-public/assets/joust-sprites Validation.png
 
 # Editor directories and files
 .vscode/*
