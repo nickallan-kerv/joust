@@ -41,6 +41,8 @@
               <option value="hunter">Hunter</option>
               <option value="pterodactyl">Pterodactyl</option>
               <option value="egg">Egg</option>
+              <option value="lavaTroll">Lava Troll</option>
+              <option value="fire">Animated Fire</option>
               <optgroup label="Platforms">
                 <option value="platformStandard">Platform Standard</option>
                 <option value="platformCover">Platform Cover</option>
@@ -60,6 +62,20 @@
               <button type="button" aria-pressed="true" data-motion="walk">Walk</button>
               <button type="button" aria-pressed="false" data-motion="fly">Fly</button>
             </div>
+
+            <section id="capture-controls" class="control-group" hidden>
+              <h2>Capture preview</h2>
+              <label for="capture-mount-select">Captured mount</label>
+              <select id="capture-mount-select">
+                <option value="player">Player</option>
+                <option value="bounder">Bounder</option>
+                <option value="hunter">Hunter</option>
+              </select>
+              <label class="check-row" for="capture-overlay-toggle">
+                <input id="capture-overlay-toggle" type="checkbox" checked />
+                <span>Show captured mount</span>
+              </label>
+            </section>
 
             <label id="facing-label">Facing</label>
             <div id="facing-controls" class="segmented compact" role="group" aria-label="Facing direction">
