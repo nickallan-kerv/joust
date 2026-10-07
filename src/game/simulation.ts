@@ -41,6 +41,8 @@ const LAVA_TROLL_TRIGGER_HEIGHT = 112
 const LAVA_TROLL_GRAB_DURATION = 0.18
 const LAVA_TROLL_DRAG_SPEED = 120
 const HATCH_MOUNT_ARRIVAL_SPEED = 300
+const EGG_JOUST_KNOCKBACK = 260
+const EGG_ROLLING_FRICTION = 5
 type EnemyBehavior = 'bounder' | 'hunter' | 'pterodactyl'
 
 const AI_AIR_ACCELERATION: Record<EnemyBehavior, number> = {
@@ -501,11 +503,13 @@ function updateLavaGrab(game: GameState, bird: Bird, dt: number, platformContact
 
 function dropEgg(game: GameState, enemy: Enemy) {
   const inheritedVelocity = enemy.vx * 0.25
+  const playerOffset = wrappedDelta(game.player.x, enemy.x)
+  const awayDirection: -1 | 1 = playerOffset === 0 ? enemy.facing : playerOffset > 0 ? 1 : -1
   game.eggs.push({
     id: game.nextEggId++,
     x: enemy.x,
     y: enemy.y,
-    vx: Math.abs(inheritedVelocity) > 1 ? inheritedVelocity : enemy.facing * 3,
+    vx: inheritedVelocity + awayDirection * EGG_JOUST_KNOCKBACK,
     vy: -45,
     timer: EGG_HATCH_TIME,
     hatchLevel: enemy.hatchLevel,
@@ -552,6 +556,10 @@ function updateEggs(game: GameState, dt: number) {
     if (egg.x < -EGG_RADIUS) egg.x = GAME_WIDTH + EGG_RADIUS
     if (egg.x > GAME_WIDTH + EGG_RADIUS) egg.x = -EGG_RADIUS
     landEggOnPlatforms(egg, previousY, game.platforms)
+    if (egg.vy === 0) {
+      egg.vx *= Math.exp(-EGG_ROLLING_FRICTION * dt)
+      if (Math.abs(egg.vx) < 1) egg.vx = 0
+    }
 
     const distance = Math.hypot(wrappedDelta(game.player.x, egg.x), game.player.y - egg.y)
     if (distance <= BIRD_RADIUS + EGG_RADIUS) {
@@ -595,7 +603,7 @@ function checkJousts(game: GameState) {
     if (horizontalDistance > BIRD_RADIUS * 1.7 || Math.abs(game.player.y - enemy.y) > BIRD_RADIUS * 1.65) continue
     if (enemy.collisionCooldown > 0) continue
 
-    const result = resolveJoust(game.player.y, enemy.y)
+    const result = enemy.mountArrivalX !== undefined ? 'player' : resolveJoust(game.player.y, enemy.y)
     game.player.collisionCooldown = 0.56
     enemy.collisionCooldown = 0.56
 
