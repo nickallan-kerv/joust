@@ -705,9 +705,22 @@ describe('flight simulation', () => {
     expect(game.player.score).toBe(100)
     expect(game.enemies).toHaveLength(0)
     expect(game.eggs).toHaveLength(1)
-    expect(game.eggs[0].vx).toBe(3)
+    expect(game.eggs[0].vx).toBeGreaterThan(100)
     expect(game.mountDepartures).toHaveLength(1)
     expect(game.mountDepartures[0].mountClass).toBe('bounder')
+  })
+
+  it('knocks a defeated rider egg away from the player', () => {
+    const game = createGameState()
+    startGame(game)
+    const firstEnemy = game.enemies[0]
+    if (!firstEnemy) throw new Error('Expected a spawned enemy.')
+    game.enemies = [{ ...firstEnemy, x: game.player.x + 20, y: game.player.y + 28, flightDirection: 1, flightTimer: 1, flapCooldown: 0.16, vx: 0 }]
+
+    stepGame(game, noInput, 1 / 60)
+
+    expect(game.player.score).toBe(100)
+    expect(game.eggs[0]?.vx).toBeGreaterThan(200)
   })
 
   it('nudges eggs from stationary defeated riders in their facing direction', () => {
@@ -720,7 +733,7 @@ describe('flight simulation', () => {
     stepGame(game, noInput, 1 / 60)
 
     expect(game.eggs).toHaveLength(1)
-    expect(game.eggs[0].vx).toBe(-3)
+    expect(game.eggs[0].vx).toBeLessThan(-100)
   })
 
   it('removes a life when the enemy has the higher lance', () => {
@@ -828,7 +841,7 @@ describe('flight simulation', () => {
     expect(hatchedRider.mountArrivalX).toBeGreaterThan(hatchedRider.x)
 
     game.player.x = hatchedRider.x
-    game.player.y = hatchedRider.y - 20
+    game.player.y = hatchedRider.y + 12
     game.player.invulnerability = 0
     game.player.collisionCooldown = 0
     stepGame(game, noInput, 1 / 60)
@@ -867,6 +880,22 @@ describe('flight simulation', () => {
     expect(game.eggs).toHaveLength(1)
     expect(game.eggs[0].y).toBe(312 - 8)
     expect(game.eggs[0].vy).toBe(0)
+  })
+
+  it('slows a rolling egg before it can roll off the center platform into lava', () => {
+    const game = createGameState()
+    startGame(game)
+    game.enemies = []
+    game.platforms = game.platforms.filter((platform) => !platform.burnsAway)
+    game.player.x = 480
+    game.player.y = 100
+    game.eggs = [{ id: 0, x: 690, y: 442 - 8, vx: 150, vy: 0, timer: 4, hatchLevel: 0 }]
+
+    for (let frame = 0; frame < 120; frame += 1) stepGame(game, noInput, 1 / 60)
+
+    expect(game.eggs).toHaveLength(1)
+    expect(game.eggs[0].x).toBeLessThan(728)
+    expect(game.eggs[0].vx).toBeLessThan(1)
   })
 
   it('removes an egg that falls into a lava pool', () => {
