@@ -616,7 +616,7 @@ function checkJousts(game: GameState) {
         addMountDeparture(game, enemy, enemy.hatchLevel > 0 ? 'hunter' : 'bounder')
       }
       game.enemies.splice(index, 1)
-      if (enemy.kind === 'rider') dropEgg(game, enemy)
+      if (enemy.kind === 'rider' && enemy.mountArrivalX === undefined) dropEgg(game, enemy)
       game.timeSinceKill = 0
       continue
     }
