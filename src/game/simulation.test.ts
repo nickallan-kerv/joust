@@ -830,7 +830,7 @@ describe('flight simulation', () => {
     expect(hatchedRider).toMatchObject({ mountArrivalX: 0, mountArrivalDirection: 1 })
   })
 
-  it('keeps a hatched rider vulnerable while its mount flies in from the opposite edge', () => {
+  it('defeats a stationary hatched rider without dropping an egg while its mount flies in', () => {
     const game = createGameState()
     startGame(game)
     game.eggs = [{ id: 1, x: 160, y: 140, vx: 0, vy: 0, timer: 0.01, hatchLevel: 0 }]
@@ -847,7 +847,7 @@ describe('flight simulation', () => {
     stepGame(game, noInput, 1 / 60)
 
     expect(game.enemies).not.toContain(hatchedRider)
-    expect(game.eggs).toHaveLength(1)
+    expect(game.eggs).toHaveLength(0)
   })
 
   it('mounts a hatched rider after the incoming mount reaches them', () => {
