@@ -616,14 +616,17 @@ function drawHatchedRider(context: CanvasRenderingContext2D, enemy: Enemy, time:
   }
 
   const standingFrame = getBounderStandingFrame()
+  const riderScale = composition.riderSize.width / standingFrame.width
+  const riderWidth = standingFrame.width * riderScale
+  const riderHeight = standingFrame.height * riderScale
   drawAtlasFrame(
     context,
     standingFrame,
     enemy.x,
-    enemy.y + PLATFORM_CONTACT_RADIUS - standingFrame.height / 2,
+    enemy.y + PLATFORM_CONTACT_RADIUS - riderHeight / 2,
     enemy.facing < 0,
-    standingFrame.width,
-    standingFrame.height,
+    riderWidth,
+    riderHeight,
   )
 }
 
