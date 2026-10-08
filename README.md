@@ -4,7 +4,7 @@ A small, single-player browser game inspired by the classic Joust arcade mechani
 
 ## Play
 
-Run the game locally with:
+Run the game [online](https://nickallan-kerv.github.io/joust/) or locally with:
 
 ```sh
 npm install
